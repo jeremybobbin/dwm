@@ -1,21 +1,28 @@
 /* See LICENSE file for copyright and license details. */
 
 /* appearance */
-static unsigned int borderpx  = 1;        /* border pixel of windows */
-static unsigned int snap      = 32;       /* snap pixel */
-static int showbar            = 1;        /* 0 means no bar */
-static int topbar             = 1;        /* 0 means bottom bar */
-static char *fonts[]          = { "monospace:size=10" };
-static char dmenufont[]       = "monospace:size=10";
-static char col_gray1[]       = "#222222";
-static char col_gray2[]       = "#444444";
-static char col_gray3[]       = "#bbbbbb";
-static char col_gray4[]       = "#eeeeee";
-static char col_cyan[]        = "#005577";
-static char *colors[][3]      = {
+static unsigned int borderpx          = 1;        /* border pixel of windows */
+static unsigned int snap              = 32;       /* snap pixel */
+static int showbar                    = 1;        /* 0 means no bar */
+static int topbar                     = 1;        /* 0 means bottom bar */
+static char *fonts[]                  = { "monospace:size=10" };
+static char dmenufont[]               = "monospace:size=10";
+static char col_gray1[]               = "#222222";
+static char col_gray2[]               = "#444444";
+static char col_gray3[]               = "#bbbbbb";
+static char col_gray4[]               = "#eeeeee";
+static char col_cyan[]                = "#005577";
+static const unsigned int baralpha          = 0xd0;
+static const unsigned int borderalpha       = OPAQUE;
+static char *colors[][3]        = {
 	/*               fg         bg         border   */
 	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
 	[SchemeSel]  = { col_gray4, col_cyan,  col_cyan  },
+};
+static unsigned int alphas[][3] = {
+	/*               fg      bg        border     */
+	[SchemeNorm] = { OPAQUE, baralpha, borderalpha },
+	[SchemeSel]  = { OPAQUE, baralpha, borderalpha },
 };
 
 /* tagging */
@@ -123,6 +130,12 @@ ResourcePref resources[] = {
 	{ "selfgcolor",       STRING,   &colors[SchemeSel][0]  },
 	{ "selbgcolor",       STRING,   &colors[SchemeSel][1]  },
 	{ "selbordercolor",   STRING,   &colors[SchemeSel][2]  },
+	{ "normbgalpha",      STRING,   &alphas[SchemeNorm][1] },
+	{ "normfgalpha",      STRING,   &alphas[SchemeNorm][0] },
+	{ "normborderalpha",  STRING,   &alphas[SchemeNorm][2] },
+	{ "selfgalpha",       STRING,   &alphas[SchemeSel][0]  },
+	{ "selbgalpha",       STRING,   &alphas[SchemeSel][1]  },
+	{ "selborderalpha",   STRING,   &alphas[SchemeSel][2]  },
 	{ "showbar",          INTEGER,  &showbar               },
 	{ "topbar",           INTEGER,  &topbar                },
 	{ "borderpx",         INTEGER,  &borderpx              },
