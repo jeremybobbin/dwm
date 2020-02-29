@@ -114,42 +114,17 @@ static Button buttons[] = {
 	{ ClkTagBar,            MODKEY,         Button3,        toggletag,      {0} },
 };
 
-/*
- * Xresources preferences to load at startup
- */
-
-//        XRDB_LOAD_COLOR("dwm.normbordercolor", normbordercolor);
-//        XRDB_LOAD_COLOR("dwm.normbgcolor", normbgcolor);
-//        XRDB_LOAD_COLOR("dwm.normfgcolor", normfgcolor);
-//        XRDB_LOAD_COLOR("dwm.selbordercolor", selbordercolor);
-//        XRDB_LOAD_COLOR("dwm.selbgcolor", selbgcolor);
-//        XRDB_LOAD_COLOR("dwm.selfgcolor", selfgcolor);
-//
-//
+/* Xresources preferences to load at startup */
 ResourcePref resources[] = {
-		{ "font",         STRING,  &fonts[0] },
-		{ "col_gray1",       STRING,  &colors[SchemeNorm][1] },
-		{ "col_gray2",       STRING,  &colors[SchemeNorm][2] },
-		{ "col_gray3",       STRING,  &colors[SchemeNorm][0] },
-		{ "col_gray4",       STRING,  &colors[SchemeSel][0] },
-		{ "col_cyan",        STRING,  &colors[SchemeSel][1] },
-		{ "col_cyan",        STRING,  &colors[SchemeSel][2] },
-		{ "showbar",       INTEGER,  &showbar },
-		{ "topbar",       INTEGER,  &topbar },
-		{ "borderpx",       INTEGER,  &borderpx },
-		{ "snap",       INTEGER,  &snap },
+	{ "font",             STRING,   &fonts[0]              },
+	{ "normbgcolor",      STRING,   &colors[SchemeNorm][1] },
+	{ "normfgcolor",      STRING,   &colors[SchemeNorm][0] },
+	{ "normbordercolor",  STRING,   &colors[SchemeNorm][2] },
+	{ "selfgcolor",       STRING,   &colors[SchemeSel][0]  },
+	{ "selbgcolor",       STRING,   &colors[SchemeSel][1]  },
+	{ "selbordercolor",   STRING,   &colors[SchemeSel][2]  },
+	{ "showbar",          INTEGER,  &showbar               },
+	{ "topbar",           INTEGER,  &topbar                },
+	{ "borderpx",         INTEGER,  &borderpx              },
+	{ "snap",             INTEGER,  &snap                  },
 };
-
-//ResourcePref resources[] = {
-//		{ "font",         STRING,  &fonts[0] },
-//		{ "col_gray1",       STRING,  &col_gray1 },
-//		{ "col_gray2",       STRING,  &col_gray2 },
-//		{ "col_gray3",       STRING,  &col_gray3 },
-//		{ "col_gray4",       STRING,  &col_gray4 },
-//		{ "col_cyan",        STRING,  &col_cyan },
-//		{ "col_cyan",        STRING,  &col_cyan },
-//		{ "showbar",       INTEGER,  &showbar },
-//		{ "topbar",       INTEGER,  &topbar },
-//		{ "borderpx",       INTEGER,  &borderpx },
-//		{ "snap",       INTEGER,  &snap },
-//};

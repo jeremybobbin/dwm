@@ -107,7 +107,6 @@ typedef struct {
 	const Arg arg;
 } Key;
 
-
 typedef struct {
 	const char *symbol;
 	void (*arrange)(Monitor *);
@@ -230,6 +229,7 @@ static void togglebar(const Arg *arg);
 static void togglefloating(const Arg *arg);
 static void toggletag(const Arg *arg);
 static void toggleview(const Arg *arg);
+static int resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst);
 static void unfocus(Client *c, int setfocus);
 static void unmanage(Client *c, int destroyed);
 static void unmapnotify(XEvent *e);
@@ -249,9 +249,9 @@ static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
-static void xresources(void);
 static void xres_cleanup(void);
 static void xres_init(void);
+static void xresources(void);
 static void zoom(const Arg *arg);
 
 /* variables */
@@ -1265,6 +1265,44 @@ propertynotify(XEvent *e)
 	}
 }
 
+static int
+resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
+{
+	char **sdst = dst;
+	int *idst = dst;
+	float *fdst = dst;
+
+	char fullname[256];
+	char fullclass[256];
+	char *type;
+	XrmValue ret;
+
+	snprintf(fullname, sizeof(fullname), "%s.%s",
+			"dwm", name);
+	snprintf(fullclass, sizeof(fullclass), "%s.%s",
+			"Dwm", name);
+	fullname[sizeof(fullname) - 1] = fullclass[sizeof(fullclass) - 1] = '\0';
+
+	XrmGetResource(db, fullname, fullclass, &type, &ret);
+	if (ret.addr == NULL || strncmp("String", type, 64))
+		return 1;
+
+	switch (rtype) {
+	case STRING:
+		if (strcmp(*sdst, ret.addr) != 0)
+			fprintf(stderr, "%s: %s -> %s\n", name, *sdst, ret.addr);
+		*sdst = ret.addr;
+		break;
+	case INTEGER:
+		*idst = strtoul(ret.addr, NULL, 10);
+		break;
+	case FLOAT:
+		*fdst = strtof(ret.addr, NULL);
+		break;
+	}
+	return 0;
+}
+
 void
 quit(const Arg *arg)
 {
@@ -1545,124 +1583,6 @@ setmfact(const Arg *arg)
 	selmon->mfact = f;
 	arrange(selmon);
 }
-
-int
-resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
-{
-	char **sdst = dst;
-	int *idst = dst;
-	float *fdst = dst;
-
-	char fullname[256];
-	char fullclass[256];
-	char *type;
-	XrmValue ret;
-
-	snprintf(fullname, sizeof(fullname), "%s.%s",
-			"dwm", name);
-	snprintf(fullclass, sizeof(fullclass), "%s.%s",
-			"Dwm", name);
-	fullname[sizeof(fullname) - 1] = fullclass[sizeof(fullclass) - 1] = '\0';
-
-	XrmGetResource(db, fullname, fullclass, &type, &ret);
-	if (ret.addr == NULL || strncmp("String", type, 64))
-		return 1;
-
-	switch (rtype) {
-	case STRING:
-		if (strcmp(*sdst, ret.addr) != 0)
-			fprintf(stderr, "%s: %s -> %s\n", name, *sdst, ret.addr);
-		*sdst = ret.addr;
-		break;
-	case INTEGER:
-		*idst = strtoul(ret.addr, NULL, 10);
-		break;
-	case FLOAT:
-		*fdst = strtof(ret.addr, NULL);
-		break;
-	}
-	return 0;
-}
-
-
-void
-xres_init(void)
-{
-	char *resm;
-	XrmDatabase db;
-	int i;
-
-	Display *display;
-	XrmInitialize();
-	display = XOpenDisplay(NULL);
-	resm = XResourceManagerString(display);
-	if (!resm)
-		return;
-
-	db = XrmGetStringDatabase(resm);
-	for (i = 0; i < LENGTH(resources); i++)
-		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
-
-	/* init fonts */
-	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
-		die("no fonts could be loaded.");
-	lrpad = drw->fonts->h;
-	bh = drw->fonts->h + 2;
-	updategeom();
-
-	/* init bars */
-	updatebars();
-	updatebarpos(selmon);
-	updatestatus();
-	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
-	unsigned num;
-	Window d1, d2, *wins = NULL;
-	XWindowAttributes wa;
-
-	Monitor *m;
-	Client *c;
-
-	XWindowChanges wc;
-
-	i = 0;
-	for (m = mons; m; m = m->next)
-		for (c = m->clients; c; c = c->next, i++)
-		{
-			if (!XGetWindowAttributes(dpy, c->win, &wa))
-					continue;
-			wc.border_width = c->bw = borderpx;
-			XConfigureWindow(dpy, c->win, CWBorderWidth, &wc);
-			XSetWindowBorder(dpy, c->win, scheme[SchemeNorm][ColBorder].pixel);
-			updatewindowtype(c);
-			updatesizehints(c);
-			updatewmhints(c);
-		}
-
-	XCloseDisplay(display);
-
-	for (i = 0; i < LENGTH(colors); i++) {
-		scheme[i] = drw_scm_create(drw, colors[i], 3);
-	}
-
-	focus(NULL);
-	arrange(NULL);
-}
-
-void
-xres_cleanup(void)
-{
-	int i;
-	for (i = 0; i < LENGTH(colors); i++)
-		free(scheme[i]);
-}
-
-void
-xresources(void)
-{
-	xres_cleanup();
-	xres_init();
-}
-
 
 void
 setup(void)
@@ -2243,6 +2163,85 @@ xerrorstart(Display *dpy, XErrorEvent *ee)
 }
 
 void
+xres_cleanup(void)
+{
+	int i;
+	for (i = 0; i < LENGTH(colors); i++)
+		free(scheme[i]);
+}
+
+void
+xres_init(void)
+{
+	char *resm;
+	XrmDatabase db;
+	int i;
+
+	Display *display;
+	XrmInitialize();
+	display = XOpenDisplay(NULL);
+	resm = XResourceManagerString(display);
+	if (!resm)
+		return;
+
+	db = XrmGetStringDatabase(resm);
+	for (i = 0; i < LENGTH(resources); i++)
+		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
+
+	/* init fonts */
+	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
+		die("no fonts could be loaded.");
+	lrpad = drw->fonts->h;
+	bh = drw->fonts->h + 2;
+	updategeom();
+
+	/* init bars */
+	updatebars();
+	updatebarpos(selmon);
+	updatestatus();
+	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
+	unsigned num;
+	Window d1, d2, *wins = NULL;
+	XWindowAttributes wa;
+
+	Monitor *m;
+	Client *c;
+
+	XWindowChanges wc;
+
+	i = 0;
+	for (m = mons; m; m = m->next)
+		for (c = m->clients; c; c = c->next, i++)
+		{
+			if (!XGetWindowAttributes(dpy, c->win, &wa))
+					continue;
+			wc.border_width = c->bw = borderpx;
+			XConfigureWindow(dpy, c->win, CWBorderWidth, &wc);
+			XSetWindowBorder(dpy, c->win, scheme[SchemeNorm][ColBorder].pixel);
+			updatewindowtype(c);
+			updatesizehints(c);
+			updatewmhints(c);
+		}
+
+	XCloseDisplay(display);
+
+	for (i = 0; i < LENGTH(colors); i++) {
+		scheme[i] = drw_scm_create(drw, colors[i], 3);
+	}
+
+	focus(NULL);
+	arrange(NULL);
+}
+
+void
+xresources(void)
+{
+	xres_cleanup();
+	xres_init();
+}
+
+
+void
 zoom(const Arg *arg)
 {
 	Client *c = selmon->sel;
@@ -2255,8 +2254,6 @@ zoom(const Arg *arg)
 			return;
 	pop(c);
 }
-
-
 
 int
 main(int argc, char *argv[])
