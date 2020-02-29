@@ -250,6 +250,7 @@ static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void xres_init(void);
+static void reset_scm(void);
 static void zoom(const Arg *arg);
 
 /* variables */
@@ -1547,6 +1548,19 @@ setmfact(const Arg *arg)
 int
 resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 {
+	fprintf(stderr, "in resource_load\n");
+	if (rtype == STRING)
+	{
+		fprintf(stderr, "\nname: %s\n*dst:%s\n", name, *((char**) dst));
+		if (strcmp(name, "font") == 0)
+		{
+			fprintf(stderr, "returning\n");
+			return 0;
+		}
+		else
+			fprintf(stderr, "not returning\n");
+
+	}
 	char **sdst = dst;
 	int *idst = dst;
 	float *fdst = dst;
@@ -1568,13 +1582,26 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 
 	switch (rtype) {
 	case STRING:
-		*sdst = ret.addr;
+		if (strcmp(name, "col_cyan") == 0) {
+			fprintf(stderr, "\nnew col_cyan(ret.addr): %s\n", ret.addr);
+			if (ret.addr == NULL)
+				fprintf(stderr, "re.addr == NULL\n");
+			else {
+				fprintf(stderr, "ret.addr: %s\n", ret.addr);
+
+				if (strlen((char *) ret.addr) == 7)
+				{
+					strncpy(*sdst, (char *) ret.addr, 7);
+				}
+				//*sdst = ret.addr;
+			}
+		}
 		break;
 	case INTEGER:
-		*idst = strtoul(ret.addr, NULL, 10);
+		//*idst = strtoul(ret.addr, NULL, 10);
 		break;
 	case FLOAT:
-		*fdst = strtof(ret.addr, NULL);
+		//*fdst = strtof(ret.addr, NULL);
 		break;
 	}
 	return 0;
@@ -1586,7 +1613,7 @@ xres_init(void)
 {
 	char *resm;
 	XrmDatabase db;
-	ResourcePref *p;
+	int i;
 
 	XrmInitialize();
 	resm = XResourceManagerString(dpy);
@@ -1594,8 +1621,40 @@ xres_init(void)
 		return;
 
 	db = XrmGetStringDatabase(resm);
-	for (p = resources; p < resources + LENGTH(resources); p++)
-		resource_load(db, p->name, p->type, p->dst);
+	for (i = 0; i < LENGTH(resources); i++)
+		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
+}
+
+void
+reset_scm(void)
+{
+	fprintf(stderr, "reset scm\n");
+	char *resm;
+	XrmDatabase db;
+	ResourcePref *p;
+	Display *display;
+	int i;
+
+	display = XOpenDisplay(NULL);
+	XrmInitialize();
+	resm = XResourceManagerString(display);
+	if (!resm)
+		return;
+
+	db = XrmGetStringDatabase(resm);
+
+	for (i = 0; i < LENGTH(resources); i++)
+		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
+
+	XCloseDisplay(display);
+
+	for (i = 0; i < LENGTH(colors); i++) {
+		free(scheme[i]);
+		scheme[i] = drw_scm_create(drw, colors[i], 3);
+	}
+
+	focus(NULL);
+	arrange(NULL);
 }
 
 void
