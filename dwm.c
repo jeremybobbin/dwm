@@ -1607,17 +1607,42 @@ xres_init(void)
 	for (i = 0; i < LENGTH(resources); i++)
 		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
 
+	/* init fonts */
 	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
 		die("no fonts could be loaded.");
 	lrpad = drw->fonts->h;
 	bh = drw->fonts->h + 2;
 	updategeom();
+
 	/* init bars */
 	updatebars();
 	updatebarpos(selmon);
 	updatestatus();
 	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
+	unsigned num;
+	Window d1, d2, *wins = NULL;
+	XWindowAttributes wa;
 
+	Monitor *m;
+	Client *c;
+
+	XWindowChanges wc;
+
+	i = 0;
+	for (m = mons; m; m = m->next)
+		for (c = m->clients; c; c = c->next, i++)
+		{
+			if (!XGetWindowAttributes(dpy, c->win, &wa))
+					continue;
+			wc.border_width = c->bw = borderpx;
+			XConfigureWindow(dpy, c->win, CWBorderWidth, &wc);
+			XSetWindowBorder(dpy, c->win, scheme[SchemeNorm][ColBorder].pixel);
+			updatewindowtype(c);
+			updatesizehints(c);
+			updatewmhints(c);
+		}
+
+	fprintf(stderr, "%d clients\n", i);
 	fprintf(stderr, "before close display\n");
 	XCloseDisplay(display);
 	fprintf(stderr, "after close display\n");
