@@ -248,8 +248,9 @@ static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
+static void xresources(void);
+static void xres_cleanup(void);
 static void xres_init(void);
-static void reset_scm(void);
 static void zoom(const Arg *arg);
 
 /* variables */
@@ -1547,7 +1548,7 @@ setmfact(const Arg *arg)
 int
 resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 {
-	fprintf(stderr, "in resource_load\n");
+	fprintf(stderr, "in resource_load(db, name: %s, type: %d, dst)\n", name, rtype);
 	if (rtype == STRING)
 	{
 		fprintf(stderr, "\nname: %s\n*dst:%s\n", name, *((char**) dst));
@@ -1581,26 +1582,13 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 
 	switch (rtype) {
 	case STRING:
-		if (strcmp(name, "col_cyan") == 0) {
-			fprintf(stderr, "\nnew col_cyan(ret.addr): %s\n", ret.addr);
-			if (ret.addr == NULL)
-				fprintf(stderr, "re.addr == NULL\n");
-			else {
-				fprintf(stderr, "ret.addr: %s\n", ret.addr);
-
-				if (strlen((char *) ret.addr) == 7)
-				{
-					strncpy(*sdst, (char *) ret.addr, 7);
-				}
-				//*sdst = ret.addr;
-			}
-		}
+		*sdst = ret.addr;
 		break;
 	case INTEGER:
-		//*idst = strtoul(ret.addr, NULL, 10);
+		*idst = strtoul(ret.addr, NULL, 10);
 		break;
 	case FLOAT:
-		//*fdst = strtof(ret.addr, NULL);
+		*fdst = strtof(ret.addr, NULL);
 		break;
 	}
 	return 0;
@@ -1614,47 +1602,46 @@ xres_init(void)
 	XrmDatabase db;
 	int i;
 
-	XrmInitialize();
-	resm = XResourceManagerString(dpy);
-	if (!resm)
-		return;
-
-	db = XrmGetStringDatabase(resm);
-	for (i = 0; i < LENGTH(resources); i++)
-		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
-}
-
-void
-reset_scm(void)
-{
-	fprintf(stderr, "reset scm\n");
-	char *resm;
-	XrmDatabase db;
-	ResourcePref *p;
 	Display *display;
-	int i;
-
-	display = XOpenDisplay(NULL);
 	XrmInitialize();
+	display = XOpenDisplay(NULL);
 	resm = XResourceManagerString(display);
 	if (!resm)
 		return;
 
 	db = XrmGetStringDatabase(resm);
-
 	for (i = 0; i < LENGTH(resources); i++)
 		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
 
+	fprintf(stderr, "before close display\n");
 	XCloseDisplay(display);
+	fprintf(stderr, "after close display\n");
 
+	fprintf(stderr, "before color loop\n");
 	for (i = 0; i < LENGTH(colors); i++) {
-		free(scheme[i]);
 		scheme[i] = drw_scm_create(drw, colors[i], 3);
 	}
+	fprintf(stderr, "after color loop\n");
 
 	focus(NULL);
 	arrange(NULL);
 }
+
+void
+xres_cleanup(void)
+{
+	int i;
+	for (i = 0; i < LENGTH(colors); i++)
+		free(scheme[i]);
+}
+
+void
+xresources(void)
+{
+	xres_cleanup();
+	xres_init();
+}
+
 
 void
 setup(void)
@@ -1665,9 +1652,6 @@ setup(void)
 
 	/* clean up any zombies immediately */
 	sigchld(0);
-
-	/* init xresources */
-	xres_init();
 
 	/* init screen */
 	screen = DefaultScreen(dpy);
@@ -1701,8 +1685,8 @@ setup(void)
 	cursor[CurMove] = drw_cur_create(drw, XC_fleur);
 	/* init appearance */
 	scheme = ecalloc(LENGTH(colors), sizeof(Clr *));
-	for (i = 0; i < LENGTH(colors); i++)
-		scheme[i] = drw_scm_create(drw, colors[i], 3);
+	/* init xresources */
+	xres_init();
 	/* init bars */
 	updatebars();
 	updatestatus();
