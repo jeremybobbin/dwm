@@ -84,7 +84,7 @@ static Key keys[] = {
 	{ MODKEY,                       XK_period, focusmon,       {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
 	{ MODKEY|ShiftMask,             XK_period, tagmon,         {.i = +1 } },
-	{ MODKEY,                       XK_F5,     xres_init,      {.v = NULL } },
+	{ MODKEY,                       XK_F5,     reset_scm,      {.v = NULL } },
 	TAGKEYS(                        XK_1,                      0)
 	TAGKEYS(                        XK_2,                      1)
 	TAGKEYS(                        XK_3,                      2)
@@ -125,15 +125,31 @@ static Button buttons[] = {
 //        XRDB_LOAD_COLOR("dwm.selbgcolor", selbgcolor);
 //        XRDB_LOAD_COLOR("dwm.selfgcolor", selfgcolor);
 //
+//
 ResourcePref resources[] = {
 		{ "font",         STRING,  &fonts[0] },
 		{ "col_gray1",       STRING,  &colors[SchemeNorm][1] },
 		{ "col_gray2",       STRING,  &colors[SchemeNorm][2] },
 		{ "col_gray3",       STRING,  &colors[SchemeNorm][0] },
 		{ "col_gray4",       STRING,  &colors[SchemeSel][0] },
-		{ "col_cyan",       STRING,  &colors[SchemeSel][1] },
+		{ "col_cyan",        STRING,  &colors[SchemeSel][1] },
+		{ "col_cyan",        STRING,  &colors[SchemeSel][2] },
 		{ "showbar",       INTEGER,  &showbar },
 		{ "topbar",       INTEGER,  &topbar },
 		{ "borderpx",       INTEGER,  &borderpx },
 		{ "snap",       INTEGER,  &snap },
 };
+
+//ResourcePref resources[] = {
+//		{ "font",         STRING,  &fonts[0] },
+//		{ "col_gray1",       STRING,  &col_gray1 },
+//		{ "col_gray2",       STRING,  &col_gray2 },
+//		{ "col_gray3",       STRING,  &col_gray3 },
+//		{ "col_gray4",       STRING,  &col_gray4 },
+//		{ "col_cyan",        STRING,  &col_cyan },
+//		{ "col_cyan",        STRING,  &col_cyan },
+//		{ "showbar",       INTEGER,  &showbar },
+//		{ "topbar",       INTEGER,  &topbar },
+//		{ "borderpx",       INTEGER,  &borderpx },
+//		{ "snap",       INTEGER,  &snap },
+//};
