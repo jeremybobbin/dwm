@@ -1553,13 +1553,6 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 	if (rtype == STRING)
 	{
 		fprintf(stderr, "\nname: %s\n*dst:%s\n", name, *((char**) dst));
-		if (strcmp(name, "font") == 0)
-		{
-			fprintf(stderr, "returning\n");
-			return 0;
-		}
-		else
-			fprintf(stderr, "not returning\n");
 
 	}
 	char **sdst = dst;
@@ -1584,6 +1577,7 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 	switch (rtype) {
 	case STRING:
 		*sdst = ret.addr;
+		fprintf(stderr, "new sdst: %s\n", *sdst);
 		break;
 	case INTEGER:
 		*idst = strtoul(ret.addr, NULL, 10);
@@ -1613,6 +1607,17 @@ xres_init(void)
 	db = XrmGetStringDatabase(resm);
 	for (i = 0; i < LENGTH(resources); i++)
 		resource_load(db, resources[i].name, resources[i].type, resources[i].dst);
+
+	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
+		die("no fonts could be loaded.");
+	lrpad = drw->fonts->h;
+	bh = drw->fonts->h + 2;
+	updategeom();
+	/* init bars */
+	updatebars();
+	updatebarpos(selmon);
+	updatestatus();
+	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
 
 	fprintf(stderr, "before close display\n");
 	XCloseDisplay(display);
@@ -1660,11 +1665,6 @@ setup(void)
 	sh = DisplayHeight(dpy, screen);
 	root = RootWindow(dpy, screen);
 	drw = drw_create(dpy, screen, root, sw, sh);
-	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
-		die("no fonts could be loaded.");
-	lrpad = drw->fonts->h;
-	bh = drw->fonts->h + 2;
-	updategeom();
 	/* init atoms */
 	utf8string = XInternAtom(dpy, "UTF8_STRING", False);
 	wmatom[WMProtocols] = XInternAtom(dpy, "WM_PROTOCOLS", False);
@@ -1688,9 +1688,6 @@ setup(void)
 	scheme = ecalloc(LENGTH(colors), sizeof(Clr *));
 	/* init xresources */
 	xres_init();
-	/* init bars */
-	updatebars();
-	updatestatus();
 	/* supporting window for NetWMCheck */
 	wmcheckwin = XCreateSimpleWindow(dpy, root, 0, 0, 1, 1, 0, 0, 0);
 	XChangeProperty(dpy, wmcheckwin, netatom[NetWMCheck], XA_WINDOW, 32,
