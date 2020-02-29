@@ -1548,12 +1548,6 @@ setmfact(const Arg *arg)
 int
 resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 {
-	fprintf(stderr, "in resource_load(db, name: %s, type: %d, dst)\n", name, rtype);
-	if (rtype == STRING)
-	{
-		fprintf(stderr, "\nname: %s\n*dst:%s\n", name, *((char**) dst));
-
-	}
 	char **sdst = dst;
 	int *idst = dst;
 	float *fdst = dst;
@@ -1575,8 +1569,9 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 
 	switch (rtype) {
 	case STRING:
+		if (strcmp(*sdst, ret.addr) != 0)
+			fprintf(stderr, "%s: %s -> %s\n", name, *sdst, ret.addr);
 		*sdst = ret.addr;
-		fprintf(stderr, "new sdst: %s\n", *sdst);
 		break;
 	case INTEGER:
 		*idst = strtoul(ret.addr, NULL, 10);
@@ -1642,16 +1637,11 @@ xres_init(void)
 			updatewmhints(c);
 		}
 
-	fprintf(stderr, "%d clients\n", i);
-	fprintf(stderr, "before close display\n");
 	XCloseDisplay(display);
-	fprintf(stderr, "after close display\n");
 
-	fprintf(stderr, "before color loop\n");
 	for (i = 0; i < LENGTH(colors); i++) {
 		scheme[i] = drw_scm_create(drw, colors[i], 3);
 	}
-	fprintf(stderr, "after color loop\n");
 
 	focus(NULL);
 	arrange(NULL);
