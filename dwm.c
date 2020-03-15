@@ -40,6 +40,7 @@
 #include <X11/extensions/Xinerama.h>
 #endif /* XINERAMA */
 #include <X11/Xft/Xft.h>
+#include <fcntl.h>
 
 #include "drw.h"
 #include "util.h"
@@ -141,6 +142,25 @@ typedef struct {
 	int monitor;
 } Rule;
 
+#define MAX_ARGS 3
+
+typedef struct {
+       void (*cmd)(const char *args[]);
+       const char *args[MAX_ARGS];
+} Action;
+
+typedef struct {
+       const char *name;
+       Action action;
+} Cmd;
+
+typedef struct {
+       int fd;
+       const char *file;
+       unsigned short int id;
+} CmdFifo;
+
+
 /* function declarations */
 static void applyrules(Client *c);
 static int applysizehints(Client *c, int *x, int *y, int *w, int *h, int interact);
@@ -226,13 +246,15 @@ static void updatestatus(void);
 static void updatetitle(Client *c);
 static void updatewindowtype(Client *c);
 static void updatewmhints(Client *c);
-static void view(const Arg *arg);
+static void view(const char *args[]);
 static Client *wintoclient(Window w);
 static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void zoom(const Arg *arg);
+
+static void handle_cmdfifo(void);
 
 /* variables */
 static const char broken[] = "broken";
@@ -267,6 +289,7 @@ static Display *dpy;
 static Drw *drw;
 static Monitor *mons, *selmon;
 static Window root, wmcheckwin;
+static CmdFifo cmdfifo = { .fd = -1 };
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
@@ -1375,9 +1398,26 @@ run(void)
 	XEvent ev;
 	/* main event loop */
 	XSync(dpy, False);
-	while (running && !XNextEvent(dpy, &ev))
-		if (handler[ev.type])
-			handler[ev.type](&ev); /* call handler */
+
+       int n, dpyfd, maxfd;
+       fd_set rd;
+
+       dpyfd = ConnectionNumber(dpy);
+       maxfd = cmdfifo.fd;
+       if (dpyfd > maxfd)
+               maxfd = dpyfd;
+       maxfd++;
+       while (running && !XNextEvent(dpy, &ev)) {
+	       FD_ZERO(&rd);
+	       FD_SET(cmdfifo.fd, &rd);
+	       FD_SET(dpyfd, &rd);
+	       n = select(maxfd, &rd, NULL, NULL, NULL);
+	       if (handler[ev.type])
+		       handler[ev.type](&ev); /* call handler */
+
+	       if (cmdfifo.fd != -1 && FD_ISSET(cmdfifo.fd, &rd))
+		       handle_cmdfifo();
+       }
 }
 
 void
@@ -2033,13 +2073,17 @@ updatewmhints(Client *c)
 }
 
 void
-view(const Arg *arg)
+view(const char *args[])
 {
-	if ((arg->ui & TAGMASK) == selmon->tagset[selmon->seltags])
+	unsigned int newtagset;
+	if (args[0] == NULL)
+		return;
+	newtagset = atoi(args[0]);
+	if ((newtagset & TAGMASK) == selmon->tagset[selmon->seltags])
 		return;
 	selmon->seltags ^= 1; /* toggle sel tagset */
-	if (arg->ui & TAGMASK)
-		selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
+	if (newtagset & TAGMASK)
+		selmon->tagset[selmon->seltags] = newtagset & TAGMASK;
 	focus(NULL);
 	arrange(selmon);
 }
@@ -2124,13 +2168,154 @@ zoom(const Arg *arg)
 	pop(c);
 }
 
+static Cmd *
+get_cmd_by_name(const char *name) {
+       for (unsigned int i = 0; i < LENGTH(commands); i++) {
+               if (!strcmp(name, commands[i].name))
+                       return &commands[i];
+       }
+       return NULL;
+}
+
+static void
+handle_cmdfifo(void) {
+       int r;
+       char *p, *s, cmdbuf[512], c;
+       Cmd *cmd;
+
+       r = read(cmdfifo.fd, cmdbuf, sizeof cmdbuf - 1);
+       if (r <= 0) {
+               cmdfifo.fd = -1;
+               return;
+       }
+
+       cmdbuf[r] = '\0';
+       p = cmdbuf;
+       while (*p) {
+               /* find the command name */
+               for (; *p == ' ' || *p == '\n'; p++);
+               for (s = p; *p && *p != ' ' && *p != '\n'; p++);
+               if ((c = *p))
+                       *p++ = '\0';
+               if (*s && (cmd = get_cmd_by_name(s)) != NULL) {
+                       int quote = 0;
+                       int argc = 0;
+                       const char *args[MAX_ARGS], *arg;
+                       memset(args, 0, sizeof(args));
+                       /* if arguments were specified in config.h ignore the one given via
+                        * the named pipe and thus skip everything until we find a new line
+                        */
+                       if (cmd->action.args[0] || c == '\n') {
+                               fprintf(stderr, "execute %s", s);
+                               cmd->action.cmd(cmd->action.args);
+                               while (*p && *p != '\n')
+                                       p++;
+                               continue;
+                       }
+                       /* no arguments were given in config.h so we parse the command line */
+                       while (*p == ' ')
+                               p++;
+                       arg = p;
+                       for (; (c = *p); p++) {
+                               switch (*p) {
+                               case '\\':
+                                       /* remove the escape character '\\' move every
+                                        * following character to the left by one position
+                                        */
+                                       switch (p[1]) {
+                                               case '\\':
+                                               case '\'':
+                                               case '\"': {
+                                                       char *t = p+1;
+                                                       do {
+                                                               t[-1] = *t;
+                                                       } while (*t++);
+                                               }
+                                       }
+                                       break;
+                               case '\'':
+                               case '\"':
+                                       quote = !quote;
+                                       break;
+                               case ' ':
+                                       if (!quote) {
+                               case '\n':
+                                               /* remove trailing quote if there is one */
+                                               if (*(p - 1) == '\'' || *(p - 1) == '\"')
+                                                       *(p - 1) = '\0';
+                                               *p++ = '\0';
+                                               /* remove leading quote if there is one */
+                                               if (*arg == '\'' || *arg == '\"')
+                                                       arg++;
+                                               if (argc < MAX_ARGS)
+                                                       args[argc++] = arg;
+
+                                               while (*p == ' ')
+                                                       ++p;
+                                               arg = p--;
+                                       }
+                                       break;
+                               }
+
+                               if (c == '\n' || *p == '\n') {
+                                       if (!*p)
+                                               p++;
+                                       fprintf(stderr, "execute %s", s);
+                                       for(int i = 0; i < argc; i++)
+                                               fprintf(stderr, " %s", args[i]);
+                                       fprintf(stderr, "\n");
+                                       cmd->action.cmd(args);
+                                       break;
+                               }
+                       }
+               }
+       }
+}
+
+static int
+open_or_create_fifo(const char *name, const char **name_created) {
+       struct stat info;
+       int fd;
+
+       do {
+               if ((fd = open(name, O_RDWR|O_NONBLOCK)) == -1) {
+                       if (errno == ENOENT && !mkfifo(name, S_IRUSR|S_IWUSR)) {
+                               *name_created = name;
+                               continue;
+                       }
+                       error("%s\n", strerror(errno));
+               }
+       } while (fd == -1);
+
+       if (fstat(fd, &info) == -1)
+               error("%s\n", strerror(errno));
+       if (!S_ISFIFO(info.st_mode))
+               error("%s is not a named pipe\n", name);
+       return fd;
+}
+
+
 int
 main(int argc, char *argv[])
 {
-	if (argc == 2 && !strcmp("-v", argv[1]))
-		die("dwm-"VERSION);
-	else if (argc != 1)
-		die("usage: dwm [-v]");
+       for (int i = 1; i < argc; i++) {
+               switch (argv[i][1]) {
+                       case 'v':
+                               die("dwm-"VERSION);
+                               break;
+                       case 'c': {
+				 const char *fifo;
+				 cmdfifo.fd = open_or_create_fifo(argv[++i], &cmdfifo.file);
+				 if (!(fifo = realpath(argv[i], NULL)))
+					 error("%s\n", strerror(errno));
+				 setenv("DWM_CMD_FIFO", fifo, 1);
+				 break;
+			 }
+                       default:
+                               die("usage: dwm [-v] [-c fifo]");
+                               break;
+               }
+       }
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
 	if (!(dpy = XOpenDisplay(NULL)))
