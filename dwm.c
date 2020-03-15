@@ -1393,35 +1393,46 @@ restack(Monitor *m)
 	while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
 
+Bool evpredicate(void) {
+	return True;
+}
+
 void
 run(void)
 {
 	XEvent ev;
 	/* main event loop */
-	XSync(dpy, False);
+	 XSync(dpy, False);
 
-       int n, dpyfd, maxfd;
-       fd_set rd;
+	int n, dpyfd, nfds;
+	fd_set rd;
+	sigset_t emptyset;
+	sigemptyset(&emptyset);
 
-       dpyfd = ConnectionNumber(dpy);
-       maxfd = cmdfifo.fd;
-       if (dpyfd > maxfd)
-               maxfd = dpyfd;
-       maxfd++;
-       while (running && !XNextEvent(dpy, &ev)) {
-	       FD_ZERO(&rd);
-	       FD_SET(cmdfifo.fd, &rd);
-	       FD_SET(dpyfd, &rd);
-	       n = select(maxfd, &rd, NULL, NULL, NULL);
-	       if (handler[ev.type])
-		       handler[ev.type](&ev); /* call handler */
+	dpyfd = ConnectionNumber(dpy);
+	nfds = (MAX(dpyfd, cmdfifo.fd)) + 1;
+	while (running) {
+		FD_ZERO(&rd);
+		FD_SET(cmdfifo.fd, &rd);
+		FD_SET(dpyfd, &rd);
+		if ((n = select(nfds+1, &rd, NULL, NULL, NULL)) > 0) {
+			if (FD_ISSET(cmdfifo.fd, &rd)) {
+				while (XCheckIfEvent(dpy, &ev, evpredicate, NULL))
+					if (handler[ev.type])
+						handler[ev.type](&ev); /* call handler */
+				continue;
+			}
 
-	       if (cmdfifo.fd != -1 && FD_ISSET(cmdfifo.fd, &rd))
-		       handle_cmdfifo();
-       }
+			if (FD_ISSET(cmdfifo.fd, &rd)) {
+				if (cmdfifo.fd != -1)
+					handle_cmdfifo();
+			}
+
+		}
+	}
 }
 
-void
+	void
 scan(void)
 {
 	unsigned int i, num;
@@ -1633,7 +1644,7 @@ setup(void)
 		|LeaveWindowMask|StructureNotifyMask|PropertyChangeMask;
 	XChangeWindowAttributes(dpy, root, CWEventMask|CWCursor, &wa);
 	XSelectInput(dpy, root, wa.event_mask);
-	grabkeys();
+	//grabkeys();
 	focus(NULL);
 }
 
@@ -2269,6 +2280,7 @@ handle_cmdfifo(void) {
                                        fprintf(stderr, "\n");
                                        cmd->action.cmd(args);
                                        break;
+
                                }
                        }
                }
@@ -2281,7 +2293,7 @@ open_or_create_fifo(const char *name, const char **name_created) {
        int fd;
 
        do {
-               if ((fd = open(name, O_RDWR|O_NONBLOCK)) == -1) {
+               if ((fd = open(name, O_RDWR)) == -1) {
                        if (errno == ENOENT && !mkfifo(name, S_IRUSR|S_IWUSR)) {
                                *name_created = name;
                                continue;
