@@ -188,8 +188,8 @@ static void expose(XEvent *e);
 static void focus(Client *c);
 static void focusin(XEvent *e);
 static void focusmon(const Arg *arg);
-static void focusstack(const Arg *arg);
 static Atom getatomprop(Client *c, Atom prop);
+static void focusstack(const char *args[]);
 static int getrootptr(int *x, int *y);
 static long getstate(Window w);
 static int gettextprop(Window w, Atom atom, char *text, unsigned int size);
@@ -854,13 +854,17 @@ focusmon(const Arg *arg)
 }
 
 void
-focusstack(const Arg *arg)
+focusstack(const char *args[])
 {
 	Client *c = NULL, *i;
+	int n;
 
+	if (args[0] == NULL)
+		return;
+	n = atoi(args[0]);
 	if (!selmon->sel)
 		return;
-	if (arg->i > 0) {
+	if (n > 0) {
 		for (c = selmon->sel->next; c && !ISVISIBLE(c); c = c->next);
 		if (!c)
 			for (c = selmon->clients; c && !ISVISIBLE(c); c = c->next);
@@ -1400,15 +1404,14 @@ Bool evpredicate(void) {
 void
 run(void)
 {
-	XEvent ev;
-	/* main event loop */
-	 XSync(dpy, False);
-
-	int dpyfd, nfds;
 	fd_set rd;
+	int dpyfd, nfds;
 	sigset_t emptyset;
-	sigemptyset(&emptyset);
+	XEvent ev;
 
+	/* main event loop */
+	XSync(dpy, False);
+	sigemptyset(&emptyset);
 	dpyfd = ConnectionNumber(dpy);
 	nfds = (MAX(dpyfd, cmdfifo.fd)) + 1;
 	while (running) {
@@ -1416,14 +1419,13 @@ run(void)
 		FD_SET(cmdfifo.fd, &rd);
 		FD_SET(dpyfd, &rd);
 		if (select(nfds+1, &rd, NULL, NULL, NULL) > 0) {
+			if (FD_ISSET(cmdfifo.fd, &rd) && cmdfifo.fd != -1)
+				handle_cmdfifo();
 			if (FD_ISSET(dpyfd, &rd))
-				if (XNextEvent(dpy, &ev) == 0) {
+				while (XCheckIfEvent(dpy, &ev, evpredicate, NULL)) {
 					if (handler[ev.type])
 						handler[ev.type](&ev); /* call handler */
-				} else break;
-
-			if (FD_ISSET(cmdfifo.fd, &rd) && cmdfifo.fd != -1)
-					handle_cmdfifo();
+				}
 		}
 	}
 }
@@ -1640,7 +1642,7 @@ setup(void)
 		|LeaveWindowMask|StructureNotifyMask|PropertyChangeMask;
 	XChangeWindowAttributes(dpy, root, CWEventMask|CWCursor, &wa);
 	XSelectInput(dpy, root, wa.event_mask);
-	//grabkeys();
+	grabkeys();
 	focus(NULL);
 }
 
