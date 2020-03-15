@@ -1403,7 +1403,7 @@ run(void)
 	/* main event loop */
 	 XSync(dpy, False);
 
-	int n, dpyfd, nfds;
+	int dpyfd, nfds;
 	fd_set rd;
 	sigset_t emptyset;
 	sigemptyset(&emptyset);
@@ -1414,24 +1414,20 @@ run(void)
 		FD_ZERO(&rd);
 		FD_SET(cmdfifo.fd, &rd);
 		FD_SET(dpyfd, &rd);
-		if ((n = select(nfds+1, &rd, NULL, NULL, NULL)) > 0) {
-			if (FD_ISSET(cmdfifo.fd, &rd)) {
-				while (XCheckIfEvent(dpy, &ev, evpredicate, NULL))
+		if (select(nfds+1, &rd, NULL, NULL, NULL) > 0) {
+			if (FD_ISSET(dpyfd, &rd))
+				if (XNextEvent(dpy, &ev) == 0) {
 					if (handler[ev.type])
 						handler[ev.type](&ev); /* call handler */
-				continue;
-			}
+				} else break;
 
-			if (FD_ISSET(cmdfifo.fd, &rd)) {
-				if (cmdfifo.fd != -1)
+			if (FD_ISSET(cmdfifo.fd, &rd) && cmdfifo.fd != -1)
 					handle_cmdfifo();
-			}
-
 		}
 	}
 }
 
-	void
+void
 scan(void)
 {
 	unsigned int i, num;
