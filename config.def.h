@@ -113,3 +113,11 @@ static Button buttons[] = {
 	{ ClkTagBar,            MODKEY,         Button3,        toggletag,      {0} },
 };
 
+static Cmd commands[] = {
+	/* create [cmd]: create a new window, run `cmd` in the shell if specified */
+	/*{ "create", { create,	{ NULL } } },*/
+	/* focus <win_id>: focus the window whose `DVTM_WINDOW_ID` is `win_id` */
+	{ "view",  { view,	{ NULL } } },
+	/* tag <win_id> <tag> [tag ...]: add +tag, remove -tag or set tag of the window with the given identifier */
+	/*{ "tag",    { tagid,	{ NULL } } },*/
+};
