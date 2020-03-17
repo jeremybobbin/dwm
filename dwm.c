@@ -232,6 +232,7 @@ static void tile(Monitor *);
 static void togglebar(const char *args[]);
 static void togglefloating(const char *args[]);
 static void toggletag(const char *args[]);
+static void toggletagset(const char *args[]);
 static void toggleview(const char *args[]);
 static void unfocus(Client *c, int setfocus);
 static void unmanage(Client *c, int destroyed);
@@ -247,6 +248,7 @@ static void updatetitle(Client *c);
 static void updatewindowtype(Client *c);
 static void updatewmhints(Client *c);
 static void view(const char *args[]);
+static void viewall(const char *args[]);
 static Client *wintoclient(Window w);
 static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
@@ -492,12 +494,11 @@ checkotherwm(void)
 void
 cleanup(void)
 {
-	Arg a = {.ui = ~0};
 	Layout foo = { "", NULL };
 	Monitor *m;
 	size_t i;
 
-	view(&a);
+	viewall(NULL);
 	selmon->lt[selmon->sellt] = &foo;
 	for (m = mons; m; m = m->next)
 		while (m->stack)
@@ -1784,7 +1785,7 @@ toggletag(const char *args[])
 
 	if (!selmon->sel || !args || !args[0])
 		return;
-	newtags = selmon->sel->tags ^ (atoi(args[0]) & TAGMASK);
+	newtags = selmon->sel->tags ^ ((1 << atoi(args[0])) & TAGMASK);
 	if (newtags) {
 		selmon->sel->tags = newtags;
 		focus(NULL);
@@ -1798,7 +1799,7 @@ toggleview(const char *args[])
 	unsigned int newtagset;
 	if (!selmon->sel || !args || !args[0])
 		return;
-	newtagset = selmon->tagset[selmon->seltags] ^ ((atoi(args[0])) & TAGMASK);
+	newtagset = selmon->tagset[selmon->seltags] ^ ((1 << atoi(args[0])) & TAGMASK);
 	if (newtagset) {
 		selmon->tagset[selmon->seltags] = newtagset;
 		focus(NULL);
@@ -2096,7 +2097,7 @@ void
 view(const char *args[])
 {
 	unsigned int newtagset;
-	if (args[0] == NULL)
+	if (!args || !args[0])
 		return;
 	newtagset = 1 << (atoi(args[0]));
 	if ((newtagset & TAGMASK) == selmon->tagset[selmon->seltags])
@@ -2107,6 +2108,28 @@ view(const char *args[])
 	focus(NULL);
 	arrange(selmon);
 }
+
+void
+toggletagset(const char *args[])
+{
+	selmon->seltags ^= 1; /* toggle sel tagset */
+	focus(NULL);
+	arrange(selmon);
+}
+
+void
+viewall(const char *args[])
+{
+
+	unsigned int newtagset = ~0;
+	if (newtagset == selmon->tagset[selmon->seltags])
+		return;
+	if (newtagset & TAGMASK)
+		selmon->tagset[selmon->seltags] = newtagset & TAGMASK;
+	focus(NULL);
+	arrange(selmon);
+}
+
 
 Client *
 wintoclient(Window w)
