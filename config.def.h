@@ -51,18 +51,21 @@ static const Layout layouts[] = {
 	{ MODKEY|ShiftMask,             KEY,      { tag,            { TAG } } }, \
 	{ MODKEY|ControlMask|ShiftMask, KEY,      { toggletag,      { TAG } } },
 
+
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
-/* commands */
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
 const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
 const char *termcmd[]  = { "st", NULL };
 
-static Key keys[] = {
+/* commands */
+
+
+static const Key keys[] = {
 	/* modifier                     key        function        argument */
-	{ MODKEY,                       XK_p,      {spawn,          dmenucmd}  },
-	{ MODKEY|ShiftMask,             XK_Return, {spawn,          termcmd}   },
+	{ MODKEY,                       XK_p,      {spawn,          {"dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL}}},
+	{ MODKEY|ShiftMask,             XK_Return, {spawn,          {"st", NULL}} },
 	{ MODKEY,                       XK_b,      {togglebar,      {NULL}}    },
 	{ MODKEY,                       XK_j,      {focusstack,     {"+1"}}    },
 	{ MODKEY,                       XK_k,      {focusstack,     {"-1"}}    },
@@ -100,17 +103,17 @@ static Key keys[] = {
 /* click can be ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle, ClkClientWin, or ClkRootWin */
 const Button buttons[] = {
 	/* click                event mask      button          function        argument */
-	{ ClkLtSymbol,          0,              Button1,        {setlayout,      {NULL}} },
-	{ ClkLtSymbol,          0,              Button3,        {setlayout,      {"[]="}} },
-	{ ClkWinTitle,          0,              Button2,        {zoom,           {NULL}} },
-	{ ClkStatusText,        0,              Button2,        {spawn,          termcmd } },
-	{ ClkClientWin,         MODKEY,         Button1,        {movemouse,      {NULL}} },
-	{ ClkClientWin,         MODKEY,         Button2,        {togglefloating, {NULL}} },
-	{ ClkClientWin,         MODKEY,         Button3,        {resizemouse,    {NULL}} },
-	{ ClkTagBar,            0,              Button1,        {view,           {NULL}} },
-	{ ClkTagBar,            0,              Button3,        {toggleview,     {NULL}} },
-	{ ClkTagBar,            MODKEY,         Button1,        {tag,            {NULL}} },
-	{ ClkTagBar,            MODKEY,         Button3,        {toggletag,      {NULL}} },
+	{ ClkLtSymbol,          0,              Button1,        {setlayout,      {NULL}}       },
+	{ ClkLtSymbol,          0,              Button3,        {setlayout,      {"[]="}}      },
+	{ ClkWinTitle,          0,              Button2,        {zoom,           {NULL}}       },
+	{ ClkStatusText,        0,              Button2,        {spawn,          {"st", NULL}} },
+	{ ClkClientWin,         MODKEY,         Button1,        {movemouse,      {NULL}}       },
+	{ ClkClientWin,         MODKEY,         Button2,        {togglefloating, {NULL}}       },
+	{ ClkClientWin,         MODKEY,         Button3,        {resizemouse,    {NULL}}       },
+	{ ClkTagBar,            0,              Button1,        {view,           {NULL}}       },
+	{ ClkTagBar,            0,              Button3,        {toggleview,     {NULL}}       },
+	{ ClkTagBar,            MODKEY,         Button1,        {tag,            {NULL}}       },
+	{ ClkTagBar,            MODKEY,         Button3,        {toggletag,      {NULL}}       },
 };
 
 static Cmd commands[] = {

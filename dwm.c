@@ -68,7 +68,7 @@ enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms *
 enum { ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle,
        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
 
-#define MAX_ARGS 8
+#define MAX_ARGS 16
 
 typedef struct {
        void (*func)(const char *args[]);
@@ -280,6 +280,7 @@ static Monitor *mons, *selmon;
 static Window root, wmcheckwin;
 
 /* configuration, allows nested code to access above variables */
+
 #include "config.h"
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
@@ -2244,8 +2245,8 @@ handle_cmdfifo(void) {
                if (*s && (cmd = get_cmd_by_name(s)) != NULL) {
                        int quote = 0;
                        int argc = 0;
-                       const char *args[MAX_ARGS], *arg;
-                       memset(args, 0, sizeof(args));
+                       const char **args, *arg;
+		       args = ecalloc(MAX_ARGS, sizeof(char *));
                        /* if arguments were specified in config.h ignore the one given via
                         * the named pipe and thus skip everything until we find a new line
                         */
