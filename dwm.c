@@ -68,19 +68,12 @@ enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms *
 enum { ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle,
        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
 
-typedef union {
-	int i;
-	unsigned int ui;
-	float f;
-	const void *v;
-} Arg;
-
 typedef struct {
 	unsigned int click;
 	unsigned int mask;
 	unsigned int button;
-	void (*func)(const char *args[]);
-	const Arg arg;
+	void (*func)(const char **);
+	const char *args[];
 } Button;
 
 typedef struct Monitor Monitor;
@@ -100,11 +93,12 @@ struct Client {
 	Window win;
 };
 
+#define MAX_ARGS 3
 typedef struct {
 	unsigned int mod;
 	KeySym keysym;
-	void (*func)(const Arg *);
-	const Arg arg;
+	void (*func)(const char **);
+	const char *args[MAX_ARGS];
 } Key;
 
 typedef struct {
@@ -142,7 +136,6 @@ typedef struct {
 	int monitor;
 } Rule;
 
-#define MAX_ARGS 3
 
 typedef struct {
        void (*cmd)(const char *args[]);
@@ -228,6 +221,7 @@ static void showhide(Client *c);
 static void sigchld(int unused);
 static void spawn(const char *args[]);
 static void tag(const char *args[]);
+static void tagall(const char *args[]);
 static void tagmon(const char *args[]);
 static void tile(Monitor *);
 static void togglebar(const char *args[]);
@@ -443,7 +437,7 @@ void
 buttonpress(XEvent *e)
 {
 	unsigned int i, x, click;
-	Arg arg = {0};
+	char arg[16];
 	Client *c;
 	Monitor *m;
 	XButtonPressedEvent *ev = &e->xbutton;
@@ -462,7 +456,7 @@ buttonpress(XEvent *e)
 		while (ev->x >= x && ++i < LENGTH(tags));
 		if (i < LENGTH(tags)) {
 			click = ClkTagBar;
-			arg.ui = 1 << i;
+			snprintf(arg, sizeof(arg), "%d\n", i);
 		} else if (ev->x < x + blw)
 			click = ClkLtSymbol;
 		else if (ev->x > selmon->ww - TEXTW(stext))
@@ -478,7 +472,7 @@ buttonpress(XEvent *e)
 	for (i = 0; i < LENGTH(buttons); i++)
 		if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
 		&& CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
-			buttons[i].func(click == ClkTagBar && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
+			buttons[i].func(click == ClkTagBar ? &arg : &buttons[i].args);
 }
 
 void
@@ -1026,7 +1020,7 @@ keypress(XEvent *e)
 		if (keysym == keys[i].keysym
 		&& CLEANMASK(keys[i].mod) == CLEANMASK(ev->state)
 		&& keys[i].func)
-			keys[i].func(&(keys[i].arg));
+			keys[i].func(keys[i].args);
 }
 
 void
@@ -1554,7 +1548,7 @@ setfullscreen(Client *c, int fullscreen)
 void
 setlayout(const char *args[])
 {
-	if (!args || !args[0] || args[0] != selmon->lt[selmon->sellt])
+	if (!args || !args[0] || !strcmp(args[0], selmon->lt[selmon->sellt]->symbol))
 		selmon->sellt ^= 1;
 	if (args && args[0])
 		for (int i = 0; i < sizeof(layouts); i++)
@@ -1725,6 +1719,18 @@ tag(const char *args[])
 		arrange(selmon);
 	}
 }
+
+void
+tagall(const char *args[])
+{
+       if (!selmon->sel)
+               return;
+
+       selmon->sel->tags = ~0 & TAGMASK;
+       focus(NULL);
+       arrange(selmon);
+}
+
 
 void
 tagmon(const char *args[])
