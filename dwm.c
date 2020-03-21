@@ -451,11 +451,12 @@ attachstack(Client *c)
 	c->mon->stack = c;
 }
 
+#define ARG_LEN 16
 void
 buttonpress(XEvent *e)
 {
 	unsigned int i, x, click;
-	char arg[16];
+	char *arg;
 	Client *c;
 	Monitor *m;
 	XButtonPressedEvent *ev = &e->xbutton;
@@ -468,13 +469,17 @@ buttonpress(XEvent *e)
 		focus(NULL);
 	}
 	if (ev->window == selmon->barwin) {
+
+		fprintf(stderr, "clicked barin\n", arg);
 		i = x = 0;
 		do
 			x += TEXTW(tags[i]);
 		while (ev->x >= x && ++i < LENGTH(tags));
 		if (i < LENGTH(tags)) {
+			arg = ecalloc(ARG_LEN, sizeof(char));
 			click = ClkTagBar;
-			snprintf(arg, sizeof(arg), "%d\n", i);
+			snprintf(arg, ARG_LEN, "%d", i);
+			fprintf(stderr, "clicked: %s\n", arg);
 		} else if (ev->x < x + blw)
 			click = ClkLtSymbol;
 		else if (ev->x > selmon->ww - TEXTW(stext))
@@ -490,7 +495,7 @@ buttonpress(XEvent *e)
 	for (i = 0; i < LENGTH(buttons); i++)
 		if (click == buttons[i].click && buttons[i].action.func && buttons[i].button == ev->button
 		&& CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
-			buttons[i].action.func(click == ClkTagBar ? &arg : &buttons[i].action.args);
+			buttons[i].action.func(click == ClkTagBar ? &arg : buttons[i].action.args);
 }
 
 void
@@ -2177,6 +2182,8 @@ view(const char *args[])
 	unsigned int newtagset;
 	if (!args || !args[0])
 		return;
+
+	fprintf(stderr, "view called: %d\n", args[0]);
 	newtagset = 1 << (atoi(args[0]));
 	if ((newtagset & TAGMASK) == selmon->tagset[selmon->seltags])
 		return;
