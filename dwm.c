@@ -291,12 +291,13 @@ static void (*handler[LASTEvent]) (XEvent *) = {
 	[UnmapNotify] = unmapnotify
 };
 static Atom wmatom[WMLast], netatom[NetLast];
-static int cmdfifo = -1;
-static int running = 1;
-static Cur *cursor[CurLast];
+static char *fifo;
 static Clr **scheme;
+static Cur *cursor[CurLast];
 static Display *dpy;
 static Drw *drw;
+static int cmdfifo = -1;
+static int running = 1;
 static Monitor *mons, *selmon;
 static Window root, wmcheckwin;
 
@@ -2530,24 +2531,28 @@ open_or_create_fifo(const char *name, const char **name_created) {
 int
 main(int argc, char *argv[])
 {
-       for (int i = 1; i < argc; i++) {
-               switch (argv[i][1]) {
-                       case 'v':
-                               die("dwm-"VERSION);
-                               break;
-                       case 'c': {
-				 const char *fifo;
-				 cmdfifo = open_or_create_fifo(argv[++i], &cmdfifo);
-				 if (!(fifo = realpath(argv[i], NULL)))
-					 error("%s\n", strerror(errno));
-				 setenv("DWM_CMD_FIFO", fifo, 1);
-				 break;
-			 }
-                       default:
-                               die("usage: dwm [-v] [-c fifo]");
-                               break;
-               }
-       }
+	fifo = getenv("DWM_CMD_FIFO");
+	for (int i = 1; i < argc; i++) {
+		switch (argv[i][1]) {
+			case 'v':
+				die("dwm-"VERSION);
+				break;
+			case 'c': {
+					  fifo = argv[++i];
+					  break;
+				  }
+			default:
+				  die("usage: dwm [-v] [-c fifo]");
+				  break;
+		}
+	}
+
+	if (fifo) {
+		cmdfifo = open_or_create_fifo(fifo, &cmdfifo);
+		if (!(fifo = realpath(fifo, NULL)))
+			error("%s\n", strerror(errno));
+		setenv("DWM_CMD_FIFO", fifo, 1);
+	}
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
 	if (!(dpy = XOpenDisplay(NULL)))
