@@ -1,28 +1,32 @@
 /* See LICENSE file for copyright and license details. */
 
 /* appearance */
-static unsigned int borderpx          = 1;        /* border pixel of windows */
-static unsigned int snap              = 32;       /* snap pixel */
-static int showbar                    = 1;        /* 0 means no bar */
-static int topbar                     = 1;        /* 0 means bottom bar */
-static char *fonts[]                  = { "monospace:size=10" };
-static char dmenufont[]               = "monospace:size=10";
-static char col_gray1[]               = "#222222";
-static char col_gray2[]               = "#444444";
-static char col_gray3[]               = "#bbbbbb";
-static char col_gray4[]               = "#eeeeee";
-static char col_cyan[]                = "#005577";
-static const unsigned int baralpha          = 0xd0;
-static const unsigned int borderalpha       = OPAQUE;
-static char *colors[][3]        = {
+static const unsigned int borderpx         = 1;        /* border pixel of windows */
+static const unsigned int snap             = 32;       /* snap pixel */
+static const int showbar                   = 1;        /* 0 means no bar */
+static const int topbar                    = 1;        /* 0 means bottom bar */
+static const char *fonts[]                 = { "monospace:size=10" };
+static const char dmenufont[]              = "monospace:size=10";
+static const char col_gray1[]              = "#222222";
+static const char col_gray2[]              = "#444444";
+static const char col_gray3[]              = "#bbbbbb";
+static const char col_gray4[]              = "#eeeeee";
+static const char col_cyan[]               = "#005577";
+static const unsigned int normfgalpha      = OPAQUE;
+static const unsigned int selfgalpha       = OPAQUE;
+static const unsigned int normborderalpha  = OPAQUE;
+static const unsigned int selborderalpha   = OPAQUE;
+static const unsigned int normbgalpha      = 0xd0;
+static const unsigned int selbgalpha       = 0xd0;
+static const char *colors[][3]      = {
 	/*               fg         bg         border   */
 	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
 	[SchemeSel]  = { col_gray4, col_cyan,  col_cyan  },
 };
 static unsigned int alphas[][3] = {
 	/*               fg      bg        border     */
-	[SchemeNorm] = { OPAQUE, baralpha, borderalpha },
-	[SchemeSel]  = { OPAQUE, baralpha, borderalpha },
+	[SchemeNorm] = { normfgalpha, normbgalpha, normborderalpha },
+	[SchemeSel]  = { selfgalpha,  selbgalpha,  selborderalpha  },
 };
 
 /* tagging */
