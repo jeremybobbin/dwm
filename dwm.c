@@ -1269,8 +1269,8 @@ static int
 resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 {
 	char **sdst = dst;
-	int *idst = dst;
-	float *fdst = dst;
+	int itmp, *idst = dst;
+	float ftmp, *fdst = dst;
 
 	char fullname[256];
 	char fullclass[256];
@@ -1284,20 +1284,30 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 	fullname[sizeof(fullname) - 1] = fullclass[sizeof(fullclass) - 1] = '\0';
 
 	XrmGetResource(db, fullname, fullclass, &type, &ret);
-	if (ret.addr == NULL || strncmp("String", type, 64))
+	if (ret.addr == NULL)
 		return 1;
 
 	switch (rtype) {
 	case STRING:
 		if (strcmp(*sdst, ret.addr) != 0)
 			fprintf(stderr, "%s: %s -> %s\n", name, *sdst, ret.addr);
-		*sdst = ret.addr;
+		if (ret.addr)
+			*sdst = ret.addr;
 		break;
 	case INTEGER:
-		*idst = strtoul(ret.addr, NULL, 10);
+		itmp = strtoul(ret.addr, NULL, 10);
+		if (*idst != itmp)
+			fprintf(stderr, "%s: %d -> %s\n", name, *idst, ret.addr);
+
+		if (itmp)
+			*idst = itmp;
 		break;
 	case FLOAT:
-		*fdst = strtof(ret.addr, NULL);
+		ftmp = strtof(ret.addr, NULL);
+		if (*fdst != ftmp)
+			fprintf(stderr, "%s: %f -> %f\n", name, *fdst, ret.addr);
+		if (ftmp)
+			*fdst = ftmp;
 		break;
 	}
 	return 0;
@@ -2174,10 +2184,15 @@ void
 xres_init(void)
 {
 	char *resm;
-	XrmDatabase db;
 	int i;
-
+	Client *c;
 	Display *display;
+	Monitor *m;
+	Window d1, d2, *wins = NULL;
+	XrmDatabase db;
+	XWindowAttributes wa;
+	XWindowChanges wc;
+
 	XrmInitialize();
 	display = XOpenDisplay(NULL);
 	resm = XResourceManagerString(display);
@@ -2195,26 +2210,12 @@ xres_init(void)
 	bh = drw->fonts->h + 2;
 	updategeom();
 
-	/* init bars */
-	updatebars();
-	updatebarpos(selmon);
-	updatestatus();
-	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
-	unsigned num;
-	Window d1, d2, *wins = NULL;
-	XWindowAttributes wa;
 
-	Monitor *m;
-	Client *c;
-
-	XWindowChanges wc;
-
-	i = 0;
-	for (m = mons; m; m = m->next)
-		for (c = m->clients; c; c = c->next, i++)
-		{
+	for (m = mons; m; m = m->next) {
+		m->topbar = topbar;
+		for (c = m->clients; c; c = c->next, i++) {
 			if (!XGetWindowAttributes(dpy, c->win, &wa))
-					continue;
+				continue;
 			wc.border_width = c->bw = borderpx;
 			XConfigureWindow(dpy, c->win, CWBorderWidth, &wc);
 			XSetWindowBorder(dpy, c->win, scheme[SchemeNorm][ColBorder].pixel);
@@ -2222,15 +2223,23 @@ xres_init(void)
 			updatesizehints(c);
 			updatewmhints(c);
 		}
-
-	XCloseDisplay(display);
+	}
+	
+	/* init bars */
+	updatebars();
+	updatebarpos(selmon);
+	XMoveResizeWindow(dpy, selmon->barwin, selmon->wx, selmon->by, selmon->ww, bh);
+	updatebarpos(selmon);
+	updatestatus();
 
 	for (i = 0; i < LENGTH(colors); i++) {
 		scheme[i] = drw_scm_create(drw, colors[i], 3);
 	}
 
+	XCloseDisplay(display);
+
 	focus(NULL);
-	arrange(NULL);
+	arrange(selmon);
 }
 
 void
