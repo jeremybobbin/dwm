@@ -41,6 +41,7 @@
 #endif /* XINERAMA */
 #include <X11/Xft/Xft.h>
 #include <X11/Xresource.h>
+#include <fcntl.h>
 
 #include "drw.h"
 #include "util.h"
@@ -70,19 +71,18 @@ enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms *
 enum { ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle,
        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
 
-typedef union {
-	int i;
-	unsigned int ui;
-	float f;
-	const void *v;
-} Arg;
+#define MAX_ARGS 16
+
+typedef struct {
+       void (*func)(const char *args[]);
+       const char *args[MAX_ARGS];
+} Action;
 
 typedef struct {
 	unsigned int click;
 	unsigned int mask;
 	unsigned int button;
-	void (*func)(const Arg *arg);
-	const Arg arg;
+	Action action;
 } Button;
 
 typedef struct Monitor Monitor;
@@ -102,11 +102,11 @@ struct Client {
 	Window win;
 };
 
+
 typedef struct {
 	unsigned int mod;
 	KeySym keysym;
-	void (*func)(const Arg *);
-	const Arg arg;
+	Action action;
 } Key;
 
 typedef struct {
@@ -157,6 +157,10 @@ typedef struct {
 	void *dst;
 } ResourcePref;
 
+typedef struct {
+       const char *name;
+       Action action;
+} Cmd;
 
 /* function declarations */
 static void applyrules(Client *c);
@@ -184,30 +188,30 @@ static void enternotify(XEvent *e);
 static void expose(XEvent *e);
 static void focus(Client *c);
 static void focusin(XEvent *e);
-static void focusmon(const Arg *arg);
-static void focusstack(const Arg *arg);
+static void focusmon(const char *args[]);
+static void focusstack(const char *args[]);
 static int getrootptr(int *x, int *y);
 static long getstate(Window w);
 static int gettextprop(Window w, Atom atom, char *text, unsigned int size);
 static void grabbuttons(Client *c, int focused);
 static void grabkeys(void);
-static void incnmaster(const Arg *arg);
+static void incnmaster(const char *args[]);
 static void keypress(XEvent *e);
-static void killclient(const Arg *arg);
+static void killclient(const char *args[]);
 static void manage(Window w, XWindowAttributes *wa);
 static void mappingnotify(XEvent *e);
 static void maprequest(XEvent *e);
 static void monocle(Monitor *m);
 static void motionnotify(XEvent *e);
-static void movemouse(const Arg *arg);
+static void movemouse(const char *args[]);
 static Client *nexttiled(Client *c);
 static void pop(Client *);
 static void propertynotify(XEvent *e);
-static void quit(const Arg *arg);
+static void quit(const char *args[]);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void resizeclient(Client *c, int x, int y, int w, int h);
-static void resizemouse(const Arg *arg);
+static void resizemouse(const char *args[]);
 static void restack(Monitor *m);
 static void run(void);
 static void scan(void);
@@ -216,21 +220,23 @@ static void sendmon(Client *c, Monitor *m);
 static void setclientstate(Client *c, long state);
 static void setfocus(Client *c);
 static void setfullscreen(Client *c, int fullscreen);
-static void setlayout(const Arg *arg);
-static void setmfact(const Arg *arg);
+static void setlayout(const char *args[]);
+static void setmfact(const char *args[]);
 static void setup(void);
 static void seturgent(Client *c, int urg);
 static void showhide(Client *c);
 static void sigchld(int unused);
-static void spawn(const Arg *arg);
-static void tag(const Arg *arg);
-static void tagmon(const Arg *arg);
+static void spawn(const char *args[]);
+static void tag(const char *args[]);
+static void tagall(const char *args[]);
+static void tagmon(const char *args[]);
 static void tile(Monitor *);
-static void togglebar(const Arg *arg);
-static void togglefloating(const Arg *arg);
-static void toggletag(const Arg *arg);
-static void toggleview(const Arg *arg);
 static int resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst);
+static void togglebar(const char *args[]);
+static void togglefloating(const char *args[]);
+static void toggletag(const char *args[]);
+static void toggletagset(const char *args[]);
+static void toggleview(const char *args[]);
 static void unfocus(Client *c, int setfocus);
 static void unmanage(Client *c, int destroyed);
 static void unmapnotify(XEvent *e);
@@ -244,7 +250,8 @@ static void updatestatus(void);
 static void updatetitle(Client *c);
 static void updatewindowtype(Client *c);
 static void updatewmhints(Client *c);
-static void view(const Arg *arg);
+static void view(const char *args[]);
+static void viewall(const char *args[]);
 static Client *wintoclient(Window w);
 static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
@@ -252,9 +259,11 @@ static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void xres_cleanup(void);
 static void xres_init(void);
-static void xresources(void);
+static void xresources(const char *args[]);
 static void xinitvisual();
-static void zoom(const Arg *arg);
+static void zoom(const char *args[]);
+
+static void handle_cmdfifo(void);
 
 /* variables */
 static const char broken[] = "broken";
@@ -282,6 +291,7 @@ static void (*handler[LASTEvent]) (XEvent *) = {
 	[UnmapNotify] = unmapnotify
 };
 static Atom wmatom[WMLast], netatom[NetLast];
+static int cmdfifo = -1;
 static int running = 1;
 static Cur *cursor[CurLast];
 static Clr **scheme;
@@ -296,6 +306,7 @@ static int depth;
 static Colormap cmap;
 
 /* configuration, allows nested code to access above variables */
+
 #include "config.h"
 
 /* compile-time check if all tags fit into an unsigned int bit array. */
@@ -444,7 +455,7 @@ void
 buttonpress(XEvent *e)
 {
 	unsigned int i, x, click;
-	Arg arg = {0};
+	char arg[16];
 	Client *c;
 	Monitor *m;
 	XButtonPressedEvent *ev = &e->xbutton;
@@ -463,7 +474,7 @@ buttonpress(XEvent *e)
 		while (ev->x >= x && ++i < LENGTH(tags));
 		if (i < LENGTH(tags)) {
 			click = ClkTagBar;
-			arg.ui = 1 << i;
+			snprintf(arg, sizeof(arg), "%d\n", i);
 		} else if (ev->x < x + blw)
 			click = ClkLtSymbol;
 		else if (ev->x > selmon->ww - TEXTW(stext))
@@ -477,9 +488,9 @@ buttonpress(XEvent *e)
 		click = ClkClientWin;
 	}
 	for (i = 0; i < LENGTH(buttons); i++)
-		if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
+		if (click == buttons[i].click && buttons[i].action.func && buttons[i].button == ev->button
 		&& CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
-			buttons[i].func(click == ClkTagBar && buttons[i].arg.i == 0 ? &arg : &buttons[i].arg);
+			buttons[i].action.func(click == ClkTagBar ? &arg : &buttons[i].action.args);
 }
 
 void
@@ -496,12 +507,11 @@ checkotherwm(void)
 void
 cleanup(void)
 {
-	Arg a = {.ui = ~0};
 	Layout foo = { "", NULL };
 	Monitor *m;
 	size_t i;
 
-	view(&a);
+	viewall(NULL);
 	selmon->lt[selmon->sellt] = &foo;
 	for (m = mons; m; m = m->next)
 		while (m->stack)
@@ -843,13 +853,13 @@ focusin(XEvent *e)
 }
 
 void
-focusmon(const Arg *arg)
+focusmon(const char *args[])
 {
 	Monitor *m;
 
-	if (!mons->next)
+	if (!mons->next || !args || !args[0])
 		return;
-	if ((m = dirtomon(arg->i)) == selmon)
+	if ((m = dirtomon(atoi(args[0]))) == selmon)
 		return;
 	unfocus(selmon->sel, 0);
 	selmon = m;
@@ -857,13 +867,17 @@ focusmon(const Arg *arg)
 }
 
 void
-focusstack(const Arg *arg)
+focusstack(const char *args[])
 {
 	Client *c = NULL, *i;
+	int n;
 
-	if (!selmon->sel || selmon->sel->isfullscreen)
+	if (args[0] == NULL)
 		return;
-	if (arg->i > 0) {
+	n = atoi(args[0]);
+	if (!selmon->sel)
+		return;
+	if (n > 0) {
 		for (c = selmon->sel->next; c && !ISVISIBLE(c); c = c->next);
 		if (!c)
 			for (c = selmon->clients; c && !ISVISIBLE(c); c = c->next);
@@ -991,9 +1005,11 @@ grabkeys(void)
 }
 
 void
-incnmaster(const Arg *arg)
+incnmaster(const char *args[])
 {
-	selmon->nmaster = MAX(selmon->nmaster + arg->i, 0);
+	if (!args || !args[0])
+		return;
+	selmon->nmaster = MAX(selmon->nmaster + atoi(args[0]), 0);
 	arrange(selmon);
 }
 
@@ -1021,12 +1037,12 @@ keypress(XEvent *e)
 	for (i = 0; i < LENGTH(keys); i++)
 		if (keysym == keys[i].keysym
 		&& CLEANMASK(keys[i].mod) == CLEANMASK(ev->state)
-		&& keys[i].func)
-			keys[i].func(&(keys[i].arg));
+		&& keys[i].action.func)
+			keys[i].action.func(keys[i].action.args);
 }
 
 void
-killclient(const Arg *arg)
+killclient(const char *args[])
 {
 	if (!selmon->sel)
 		return;
@@ -1160,7 +1176,7 @@ motionnotify(XEvent *e)
 }
 
 void
-movemouse(const Arg *arg)
+movemouse(const char *args[])
 {
 	int x, y, ocx, ocy, nx, ny;
 	Client *c;
@@ -1302,17 +1318,20 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 		*sdst = ret.addr;
 		break;
 	case INTEGER:
+		*idst = 0;
+		fprintf(stderr, "strtoul: %s\n", ret.addr);
 		*idst = strtoul(ret.addr, NULL, 10);
 		break;
 	case FLOAT:
 		*fdst = strtof(ret.addr, NULL);
 		break;
 	}
+	fprintf(stderr, "done loading (%s)\n", name);
 	return 0;
 }
 
 void
-quit(const Arg *arg)
+quit(const char *args[])
 {
 	running = 0;
 }
@@ -1354,7 +1373,7 @@ resizeclient(Client *c, int x, int y, int w, int h)
 }
 
 void
-resizemouse(const Arg *arg)
+resizemouse(const char *args[])
 {
 	int ocx, ocy, nw, nh;
 	Client *c;
@@ -1435,15 +1454,38 @@ restack(Monitor *m)
 	while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
 
+int
+evpredicate(Display *dpy, XEvent *xev, char *c) {
+	return 1;
+}
+
 void
 run(void)
 {
+	fd_set rd;
+	int dpyfd, nfds;
+	sigset_t emptyset;
 	XEvent ev;
+
 	/* main event loop */
 	XSync(dpy, False);
-	while (running && !XNextEvent(dpy, &ev))
-		if (handler[ev.type])
-			handler[ev.type](&ev); /* call handler */
+	sigemptyset(&emptyset);
+	dpyfd = ConnectionNumber(dpy);
+	nfds = (MAX(dpyfd, cmdfifo)) + 1;
+	while (running) {
+		FD_ZERO(&rd);
+		FD_SET(cmdfifo, &rd);
+		FD_SET(dpyfd, &rd);
+		if (select(nfds+1, &rd, NULL, NULL, NULL) > 0) {
+			if (FD_ISSET(cmdfifo, &rd) && cmdfifo != -1)
+				handle_cmdfifo();
+			if (FD_ISSET(dpyfd, &rd))
+				while (XCheckIfEvent(dpy, &ev, evpredicate, NULL)) {
+					if (handler[ev.type])
+						handler[ev.type](&ev); /* call handler */
+				}
+		}
+	}
 }
 
 void
@@ -1563,13 +1605,16 @@ setfullscreen(Client *c, int fullscreen)
 	}
 }
 
+/* setlayout "[]=" */
 void
-setlayout(const Arg *arg)
+setlayout(const char *args[])
 {
-	if (!arg || !arg->v || arg->v != selmon->lt[selmon->sellt])
+	if (!args || !args[0] || !strcmp(args[0], selmon->lt[selmon->sellt]->symbol))
 		selmon->sellt ^= 1;
-	if (arg && arg->v)
-		selmon->lt[selmon->sellt] = (Layout *)arg->v;
+	if (args && args[0])
+		for (int i = 0; i < sizeof(layouts); i++)
+			if (strcmp(layouts[i].symbol, args[0]) == 0)
+				selmon->lt[selmon->sellt] = &layouts[i];
 	strncpy(selmon->ltsymbol, selmon->lt[selmon->sellt]->symbol, sizeof selmon->ltsymbol);
 	if (selmon->sel)
 		arrange(selmon);
@@ -1579,13 +1624,14 @@ setlayout(const Arg *arg)
 
 /* arg > 1.0 will set mfact absolutely */
 void
-setmfact(const Arg *arg)
+setmfact(const char *args[])
 {
 	float f;
 
-	if (!arg || !selmon->lt[selmon->sellt]->arrange)
+	if (!args || !args[0] || !selmon->lt[selmon->sellt]->arrange)
 		return;
-	f = arg->f < 1.0 ? arg->f + selmon->mfact : arg->f - 1.0;
+	f = strtof(args[0], NULL);
+	f = f < 1.0 ? f + selmon->mfact : f - 1.0;
 	if (f < 0.1 || f > 0.9)
 		return;
 	selmon->mfact = f;
@@ -1696,37 +1742,54 @@ sigchld(int unused)
 }
 
 void
-spawn(const Arg *arg)
+spawn(const char *args[])
 {
-	if (arg->v == dmenucmd)
-		dmenumon[0] = '0' + selmon->num;
+	if (!args || !args[0])
+		return;
 	if (fork() == 0) {
 		if (dpy)
 			close(ConnectionNumber(dpy));
 		setsid();
-		execvp(((char **)arg->v)[0], (char **)arg->v);
-		fprintf(stderr, "dwm: execvp %s", ((char **)arg->v)[0]);
+		execvp(args[0], args);
+		fprintf(stderr, "dwm: execvp %s", args[0]);
 		perror(" failed");
 		exit(EXIT_SUCCESS);
 	}
 }
 
 void
-tag(const Arg *arg)
+tag(const char *args[])
 {
-	if (selmon->sel && arg->ui & TAGMASK) {
-		selmon->sel->tags = arg->ui & TAGMASK;
+	unsigned int newtag;
+	if (!args || !args[0])
+		return;
+	newtag = 1 << (atoi(args[0]));
+	if (selmon->sel && args && newtag & TAGMASK) {
+		selmon->sel->tags = newtag & TAGMASK;
 		focus(NULL);
 		arrange(selmon);
 	}
 }
 
 void
-tagmon(const Arg *arg)
+tagall(const char *args[])
 {
-	if (!selmon->sel || !mons->next)
+       if (!selmon->sel)
+               return;
+
+       selmon->sel->tags = ~0 & TAGMASK;
+       focus(NULL);
+       arrange(selmon);
+}
+
+
+void
+tagmon(const char *args[])
+{
+
+	if (!selmon->sel || !mons->next || !args || !args[0])
 		return;
-	sendmon(selmon->sel, dirtomon(arg->i));
+	sendmon(selmon->sel, dirtomon(atoi(args[0])));
 }
 
 void
@@ -1756,7 +1819,7 @@ tile(Monitor *m)
 }
 
 void
-togglebar(const Arg *arg)
+togglebar(const char *args[])
 {
 	selmon->showbar = !selmon->showbar;
 	updatebarpos(selmon);
@@ -1765,7 +1828,7 @@ togglebar(const Arg *arg)
 }
 
 void
-togglefloating(const Arg *arg)
+togglefloating(const char *args[])
 {
 	if (!selmon->sel)
 		return;
@@ -1779,13 +1842,13 @@ togglefloating(const Arg *arg)
 }
 
 void
-toggletag(const Arg *arg)
+toggletag(const char *args[])
 {
 	unsigned int newtags;
 
-	if (!selmon->sel)
+	if (!selmon->sel || !args || !args[0])
 		return;
-	newtags = selmon->sel->tags ^ (arg->ui & TAGMASK);
+	newtags = selmon->sel->tags ^ ((1 << atoi(args[0])) & TAGMASK);
 	if (newtags) {
 		selmon->sel->tags = newtags;
 		focus(NULL);
@@ -1794,10 +1857,12 @@ toggletag(const Arg *arg)
 }
 
 void
-toggleview(const Arg *arg)
+toggleview(const char *args[])
 {
-	unsigned int newtagset = selmon->tagset[selmon->seltags] ^ (arg->ui & TAGMASK);
-
+	unsigned int newtagset;
+	if (!selmon->sel || !args || !args[0])
+		return;
+	newtagset = selmon->tagset[selmon->seltags] ^ ((1 << atoi(args[0])) & TAGMASK);
 	if (newtagset) {
 		selmon->tagset[selmon->seltags] = newtagset;
 		focus(NULL);
@@ -2094,16 +2159,42 @@ updatewmhints(Client *c)
 }
 
 void
-view(const Arg *arg)
+view(const char *args[])
 {
-	if ((arg->ui & TAGMASK) == selmon->tagset[selmon->seltags])
+	unsigned int newtagset;
+	if (!args || !args[0])
+		return;
+	newtagset = 1 << (atoi(args[0]));
+	if ((newtagset & TAGMASK) == selmon->tagset[selmon->seltags])
 		return;
 	selmon->seltags ^= 1; /* toggle sel tagset */
-	if (arg->ui & TAGMASK)
-		selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
+	if (newtagset & TAGMASK)
+		selmon->tagset[selmon->seltags] = newtagset & TAGMASK;
 	focus(NULL);
 	arrange(selmon);
 }
+
+void
+toggletagset(const char *args[])
+{
+	selmon->seltags ^= 1; /* toggle sel tagset */
+	focus(NULL);
+	arrange(selmon);
+}
+
+void
+viewall(const char *args[])
+{
+
+	unsigned int newtagset = ~0;
+	if (newtagset == selmon->tagset[selmon->seltags])
+		return;
+	if (newtagset & TAGMASK)
+		selmon->tagset[selmon->seltags] = newtagset & TAGMASK;
+	focus(NULL);
+	arrange(selmon);
+}
+
 
 Client *
 wintoclient(Window w)
@@ -2242,7 +2333,7 @@ xres_init(void)
 }
 
 void
-xresources(void)
+xresources(const char *args[])
 {
 	xres_cleanup();
 	xres_init();
@@ -2285,7 +2376,7 @@ xinitvisual()
 }
 
 void
-zoom(const Arg *arg)
+zoom(const char *args[])
 {
 	Client *c = selmon->sel;
 
@@ -2298,13 +2389,155 @@ zoom(const Arg *arg)
 	pop(c);
 }
 
+static Cmd *
+get_cmd_by_name(const char *name) {
+       for (unsigned int i = 0; i < LENGTH(commands); i++) {
+               if (!strcmp(name, commands[i].name))
+                       return &commands[i];
+       }
+       return NULL;
+}
+
+static void
+handle_cmdfifo(void) {
+       int r;
+       char *p, *s, cmdbuf[512], c;
+       Cmd *cmd;
+
+       r = read(cmdfifo, cmdbuf, sizeof cmdbuf - 1);
+       if (r <= 0) {
+               cmdfifo = -1;
+               return;
+       }
+
+       cmdbuf[r] = '\0';
+       p = cmdbuf;
+       while (*p) {
+               /* find the command name */
+               for (; *p == ' ' || *p == '\n'; p++);
+               for (s = p; *p && *p != ' ' && *p != '\n'; p++);
+               if ((c = *p))
+                       *p++ = '\0';
+               if (*s && (cmd = get_cmd_by_name(s)) != NULL) {
+                       int quote = 0;
+                       int argc = 0;
+                       const char **args, *arg;
+		       args = ecalloc(MAX_ARGS, sizeof(char *));
+                       /* if arguments were specified in config.h ignore the one given via
+                        * the named pipe and thus skip everything until we find a new line
+                        */
+                       if (cmd->action.args[0] || c == '\n') {
+                               fprintf(stderr, "execute %s", s);
+                               cmd->action.func(cmd->action.args);
+                               while (*p && *p != '\n')
+                                       p++;
+                               continue;
+                       }
+                       /* no arguments were given in config.h so we parse the command line */
+                       while (*p == ' ')
+                               p++;
+                       arg = p;
+                       for (; (c = *p); p++) {
+                               switch (*p) {
+                               case '\\':
+                                       /* remove the escape character '\\' move every
+                                        * following character to the left by one position
+                                        */
+                                       switch (p[1]) {
+                                               case '\\':
+                                               case '\'':
+                                               case '\"': {
+                                                       char *t = p+1;
+                                                       do {
+                                                               t[-1] = *t;
+                                                       } while (*t++);
+                                               }
+                                       }
+                                       break;
+                               case '\'':
+                               case '\"':
+                                       quote = !quote;
+                                       break;
+                               case ' ':
+                                       if (!quote) {
+                               case '\n':
+                                               /* remove trailing quote if there is one */
+                                               if (*(p - 1) == '\'' || *(p - 1) == '\"')
+                                                       *(p - 1) = '\0';
+                                               *p++ = '\0';
+                                               /* remove leading quote if there is one */
+                                               if (*arg == '\'' || *arg == '\"')
+                                                       arg++;
+                                               if (argc < MAX_ARGS)
+                                                       args[argc++] = arg;
+
+                                               while (*p == ' ')
+                                                       ++p;
+                                               arg = p--;
+                                       }
+                                       break;
+                               }
+
+                               if (c == '\n' || *p == '\n') {
+                                       if (!*p)
+                                               p++;
+                                       fprintf(stderr, "execute %s", s);
+                                       for(int i = 0; i < argc; i++)
+                                               fprintf(stderr, " %s", args[i]);
+                                       fprintf(stderr, "\n");
+                                       cmd->action.func(args);
+                                       break;
+
+                               }
+                       }
+               }
+       }
+}
+
+static int
+open_or_create_fifo(const char *name, const char **name_created) {
+       struct stat info;
+       int fd;
+
+       do {
+               if ((fd = open(name, O_RDWR)) == -1) {
+                       if (errno == ENOENT && !mkfifo(name, S_IRUSR|S_IWUSR)) {
+                               *name_created = name;
+                               continue;
+                       }
+                       error("%s\n", strerror(errno));
+               }
+       } while (fd == -1);
+
+       if (fstat(fd, &info) == -1)
+               error("%s\n", strerror(errno));
+       if (!S_ISFIFO(info.st_mode))
+               error("%s is not a named pipe\n", name);
+       return fd;
+}
+
+
 int
 main(int argc, char *argv[])
 {
-	if (argc == 2 && !strcmp("-v", argv[1]))
-		die("dwm-"VERSION);
-	else if (argc != 1)
-		die("usage: dwm [-v]");
+       for (int i = 1; i < argc; i++) {
+               switch (argv[i][1]) {
+                       case 'v':
+                               die("dwm-"VERSION);
+                               break;
+                       case 'c': {
+				 const char *fifo;
+				 cmdfifo = open_or_create_fifo(argv[++i], &cmdfifo);
+				 if (!(fifo = realpath(argv[i], NULL)))
+					 error("%s\n", strerror(errno));
+				 setenv("DWM_CMD_FIFO", fifo, 1);
+				 break;
+			 }
+                       default:
+                               die("usage: dwm [-v] [-c fifo]");
+                               break;
+               }
+       }
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
 	if (!(dpy = XOpenDisplay(NULL)))
