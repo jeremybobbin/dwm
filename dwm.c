@@ -68,12 +68,18 @@ enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms *
 enum { ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle,
        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
 
+#define MAX_ARGS 8
+
+typedef struct {
+       void (*func)(const char *args[]);
+       const char *args[MAX_ARGS];
+} Action;
+
 typedef struct {
 	unsigned int click;
 	unsigned int mask;
 	unsigned int button;
-	void (*func)(const char **);
-	const char *args[];
+	Action action;
 } Button;
 
 typedef struct Monitor Monitor;
@@ -93,12 +99,11 @@ struct Client {
 	Window win;
 };
 
-#define MAX_ARGS 3
+
 typedef struct {
 	unsigned int mod;
 	KeySym keysym;
-	void (*func)(const char **);
-	const char *args[MAX_ARGS];
+	Action action;
 } Key;
 
 typedef struct {
@@ -136,23 +141,10 @@ typedef struct {
 	int monitor;
 } Rule;
 
-
-typedef struct {
-       void (*cmd)(const char *args[]);
-       const char *args[MAX_ARGS];
-} Action;
-
 typedef struct {
        const char *name;
        Action action;
 } Cmd;
-
-typedef struct {
-       int fd;
-       const char *file;
-       unsigned short int id;
-} CmdFifo;
-
 
 /* function declarations */
 static void applyrules(Client *c);
@@ -278,6 +270,7 @@ static void (*handler[LASTEvent]) (XEvent *) = {
 	[UnmapNotify] = unmapnotify
 };
 static Atom wmatom[WMLast], netatom[NetLast];
+static int cmdfifo = -1;
 static int running = 1;
 static Cur *cursor[CurLast];
 static Clr **scheme;
@@ -285,7 +278,6 @@ static Display *dpy;
 static Drw *drw;
 static Monitor *mons, *selmon;
 static Window root, wmcheckwin;
-static CmdFifo cmdfifo = { .fd = -1 };
 
 /* configuration, allows nested code to access above variables */
 #include "config.h"
@@ -469,9 +461,9 @@ buttonpress(XEvent *e)
 		click = ClkClientWin;
 	}
 	for (i = 0; i < LENGTH(buttons); i++)
-		if (click == buttons[i].click && buttons[i].func && buttons[i].button == ev->button
+		if (click == buttons[i].click && buttons[i].action.func && buttons[i].button == ev->button
 		&& CLEANMASK(buttons[i].mask) == CLEANMASK(ev->state))
-			buttons[i].func(click == ClkTagBar ? &arg : &buttons[i].args);
+			buttons[i].action.func(click == ClkTagBar ? &arg : &buttons[i].action.args);
 }
 
 void
@@ -1018,8 +1010,8 @@ keypress(XEvent *e)
 	for (i = 0; i < LENGTH(keys); i++)
 		if (keysym == keys[i].keysym
 		&& CLEANMASK(keys[i].mod) == CLEANMASK(ev->state)
-		&& keys[i].func)
-			keys[i].func(keys[i].args);
+		&& keys[i].action.func)
+			keys[i].action.func(keys[i].action.args);
 }
 
 void
@@ -1393,8 +1385,9 @@ restack(Monitor *m)
 	while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
 
-Bool evpredicate(void) {
-	return True;
+int
+evpredicate(Display *dpy, XEvent *xev, char *c) {
+	return 1;
 }
 
 void
@@ -1409,13 +1402,13 @@ run(void)
 	XSync(dpy, False);
 	sigemptyset(&emptyset);
 	dpyfd = ConnectionNumber(dpy);
-	nfds = (MAX(dpyfd, cmdfifo.fd)) + 1;
+	nfds = (MAX(dpyfd, cmdfifo)) + 1;
 	while (running) {
 		FD_ZERO(&rd);
-		FD_SET(cmdfifo.fd, &rd);
+		FD_SET(cmdfifo, &rd);
 		FD_SET(dpyfd, &rd);
 		if (select(nfds+1, &rd, NULL, NULL, NULL) > 0) {
-			if (FD_ISSET(cmdfifo.fd, &rd) && cmdfifo.fd != -1)
+			if (FD_ISSET(cmdfifo, &rd) && cmdfifo != -1)
 				handle_cmdfifo();
 			if (FD_ISSET(dpyfd, &rd))
 				while (XCheckIfEvent(dpy, &ev, evpredicate, NULL)) {
@@ -1689,6 +1682,8 @@ sigchld(int unused)
 void
 spawn(const char *args[])
 {
+	if (!args || !args[0])
+		return;
 	if (fork() == 0) {
 		if (dpy)
 			close(ConnectionNumber(dpy));
@@ -2232,9 +2227,9 @@ handle_cmdfifo(void) {
        char *p, *s, cmdbuf[512], c;
        Cmd *cmd;
 
-       r = read(cmdfifo.fd, cmdbuf, sizeof cmdbuf - 1);
+       r = read(cmdfifo, cmdbuf, sizeof cmdbuf - 1);
        if (r <= 0) {
-               cmdfifo.fd = -1;
+               cmdfifo = -1;
                return;
        }
 
@@ -2256,7 +2251,7 @@ handle_cmdfifo(void) {
                         */
                        if (cmd->action.args[0] || c == '\n') {
                                fprintf(stderr, "execute %s", s);
-                               cmd->action.cmd(cmd->action.args);
+                               cmd->action.func(cmd->action.args);
                                while (*p && *p != '\n')
                                        p++;
                                continue;
@@ -2313,7 +2308,7 @@ handle_cmdfifo(void) {
                                        for(int i = 0; i < argc; i++)
                                                fprintf(stderr, " %s", args[i]);
                                        fprintf(stderr, "\n");
-                                       cmd->action.cmd(args);
+                                       cmd->action.func(args);
                                        break;
 
                                }
@@ -2355,7 +2350,7 @@ main(int argc, char *argv[])
                                break;
                        case 'c': {
 				 const char *fifo;
-				 cmdfifo.fd = open_or_create_fifo(argv[++i], &cmdfifo.file);
+				 cmdfifo = open_or_create_fifo(argv[++i], &cmdfifo);
 				 if (!(fifo = realpath(argv[i], NULL)))
 					 error("%s\n", strerror(errno));
 				 setenv("DWM_CMD_FIFO", fifo, 1);
