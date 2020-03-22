@@ -153,6 +153,7 @@ static Cmd commands[] = {
 	/* create [cmd]: create a new window, run `cmd` in the shell if specified */
 	/*{ "create", { create,	{ NULL } } },*/
 	/* focus <win_id>: focus the window whose `DVTM_WINDOW_ID` is `win_id` */
+	{ "create",         { spawn,          { NULL } } },
 	{ "focusmon",       { focusmon,       { NULL } } },
 	{ "focusstack",     { focusstack,     { NULL } } },
 	{ "killclient",     { killclient,     { NULL } } },
