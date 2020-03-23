@@ -250,10 +250,10 @@ static Monitor *wintomon(Window w);
 static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
+static void xinitvisual();
 static void xres_cleanup(void);
 static void xres_init(void);
-static void xresources(void);
-static void xinitvisual();
+static void xresources(const Arg *arg);
 static void zoom(const Arg *arg);
 
 /* variables */
@@ -1313,7 +1313,7 @@ resource_load(XrmDatabase db, char *name, enum resource_type rtype, void *dst)
 	case FLOAT:
 		ftmp = strtof(ret.addr, NULL);
 		if (*fdst != ftmp)
-			fprintf(stderr, "%s: %f -> %f\n", name, *fdst, ret.addr);
+			fprintf(stderr, "%s: %f -> %s\n", name, *fdst, ret.addr);
 		if (ftmp)
 			*fdst = ftmp;
 		break;
@@ -1605,7 +1605,6 @@ setmfact(const Arg *arg)
 void
 setup(void)
 {
-	int i;
 	XSetWindowAttributes wa;
 	Atom utf8string;
 
@@ -2251,13 +2250,14 @@ xres_init(void)
 }
 
 void
-xresources(void)
+xresources(const Arg *arg)
 {
 	xres_cleanup();
 	xres_init();
 }
 
-xinitvisual()
+void
+xinitvisual(void)
 {
 	XVisualInfo *infos;
 	XRenderPictFormat *fmt;
