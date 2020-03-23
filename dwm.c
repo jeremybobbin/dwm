@@ -2506,24 +2506,22 @@ handle_cmdfifo(void) {
 }
 
 static int
-open_or_create_fifo(const char *name, const char **name_created) {
+open_or_create_fifo(const char *name) {
        struct stat info;
        int fd;
 
        do {
                if ((fd = open(name, O_RDWR)) == -1) {
-                       if (errno == ENOENT && !mkfifo(name, S_IRUSR|S_IWUSR)) {
-                               *name_created = name;
+                       if (errno == ENOENT && !mkfifo(name, S_IRUSR|S_IWUSR))
                                continue;
-                       }
-                       error("%s\n", strerror(errno));
+                       fprintf(stderr, "%s\n", strerror(errno));
                }
        } while (fd == -1);
 
        if (fstat(fd, &info) == -1)
-               error("%s\n", strerror(errno));
+               fprintf(stderr, "%s\n", strerror(errno));
        if (!S_ISFIFO(info.st_mode))
-               error("%s is not a named pipe\n", name);
+               fprintf(stderr, "%s is not a named pipe\n", name);
        return fd;
 }
 
@@ -2548,9 +2546,9 @@ main(int argc, char *argv[])
 	}
 
 	if (fifo) {
-		cmdfifo = open_or_create_fifo(fifo, &cmdfifo);
+		cmdfifo = open_or_create_fifo(fifo);
 		if (!(fifo = realpath(fifo, NULL)))
-			error("%s\n", strerror(errno));
+			fprintf(stderr, "%s\n", strerror(errno));
 		setenv("DWM_CMD_FIFO", fifo, 1);
 	}
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
