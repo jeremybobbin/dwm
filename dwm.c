@@ -251,7 +251,7 @@ static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void xres_cleanup(void);
 static void xres_init(void);
-static void xresources(void);
+static void xresources(const Arg *arg);
 static void zoom(const Arg *arg);
 
 /* variables */
@@ -2243,7 +2243,7 @@ xres_init(void)
 }
 
 void
-xresources(void)
+xresources(const Arg *arg)
 {
 	xres_cleanup();
 	xres_init();
