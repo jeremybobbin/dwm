@@ -67,8 +67,6 @@ static const char *termcmd[]  = { "st", NULL };
 /* commands */
 static const Key keys[] = {
 	/* modifier                     key        function        argument */
-	{ MODKEY,                       XK_p,      {spawn,          {"dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL}}},
-	{ MODKEY|ShiftMask,             XK_Return, {spawn,          {"st", NULL}} },
 	{ MODKEY|ShiftMask,             XK_q,      {quit,           {NULL}}    },
 };
 
