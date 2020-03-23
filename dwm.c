@@ -2360,10 +2360,10 @@ main(int argc, char *argv[])
 			case 'v':
 				die("dwm-"VERSION);
 				break;
-			case 'c': {
-					  fifo = argv[++i];
-					  break;
-				  }
+			case 'c':
+				fifo = argv[++i];
+				setenv("DWM_CMD_FIFO", fifo, 1);
+				break;
 			default:
 				  die("usage: dwm [-v] [-c fifo]");
 				  break;
@@ -2374,7 +2374,6 @@ main(int argc, char *argv[])
 		cmdfifo = open_or_create_fifo(fifo);
 		if (!(fifo = realpath(fifo, NULL)))
 			fprintf(stderr, "%s\n", strerror(errno));
-		setenv("DWM_CMD_FIFO", fifo, 1);
 	}
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
