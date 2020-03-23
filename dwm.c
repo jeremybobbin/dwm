@@ -2541,16 +2541,18 @@ open_or_create_fifo(const char *name, const char **name_created) {
 int
 main(int argc, char *argv[])
 {
-	fifo = getenv("DWM_CMD_FIFO");
+	if ((fifo = getenv("DWM_CMD_FIFO")) != NULL)
+		fprintf(stderr, "DWM_CMD_FIFO: %s\n", fifo);
+
 	for (int i = 1; i < argc; i++) {
 		switch (argv[i][1]) {
 			case 'v':
 				die("dwm-"VERSION);
 				break;
-			case 'c': {
-					  fifo = argv[++i];
-					  break;
-				  }
+			case 'c':
+				fifo = argv[++i];
+				setenv("DWM_CMD_FIFO", fifo, 1);
+				break;
 			default:
 				  die("usage: dwm [-v] [-c fifo]");
 				  break;
@@ -2561,7 +2563,6 @@ main(int argc, char *argv[])
 		cmdfifo = open_or_create_fifo(fifo, &cmdfifo);
 		if (!(fifo = realpath(fifo, NULL)))
 			error("%s\n", strerror(errno));
-		setenv("DWM_CMD_FIFO", fifo, 1);
 	}
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
