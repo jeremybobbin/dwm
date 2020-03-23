@@ -2561,7 +2561,6 @@ main(int argc, char *argv[])
 		cmdfifo = open_or_create_fifo(fifo);
 		if (!(fifo = realpath(fifo, NULL)))
 			fprintf(stderr, "%s\n", strerror(errno));
-		setenv("DWM_CMD_FIFO", fifo, 1);
 	}
 	if (!setlocale(LC_CTYPE, "") || !XSupportsLocale())
 		fputs("warning: no locale support\n", stderr);
