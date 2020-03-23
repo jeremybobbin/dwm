@@ -2351,7 +2351,7 @@ xres_init(void)
 }
 
 void
-xresources(void)
+xresources(const Arg *arg)
 {
 	xres_cleanup();
 	xres_init();
