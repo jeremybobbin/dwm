@@ -2283,7 +2283,6 @@ xerrorstart(Display *dpy, XErrorEvent *ee)
 }
 
 void
-<<<<<<< HEAD
 xres_cleanup(void)
 {
 	int i;
@@ -2354,7 +2353,7 @@ xres_init(void)
 }
 
 void
-xresources(const Arg *arg)
+xresources(void)
 {
 	xres_cleanup();
 	xres_init();
